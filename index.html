@@ -407,6 +407,39 @@
     .factors div { margin-bottom: 0.25rem; }
     .factors div:last-child { margin-bottom: 0; }
 
+    /* Probability breakdown list (sub-probabilities) */
+    .breakdown-section {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .breakdown-section h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: var(--text-primary);
+    }
+    .breakdown-list {
+      list-style: none;
+    }
+    .breakdown-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--glass-border);
+      font-size: 0.88rem;
+    }
+    .breakdown-list li:last-child { border-bottom: none; }
+    .breakdown-list .breakdown-label { color: var(--text-primary); }
+    .breakdown-list .breakdown-value { font-family: 'JetBrains Mono', monospace; color: var(--text-muted); }
+    .breakdown-list .breakdown-percent { font-family: 'JetBrains Mono', monospace; color: var(--accent-cyan); font-weight: 500; }
+
     /* Distance visual */
     .distance-visual {
       height: 8px;
@@ -665,19 +698,20 @@
     </section>
 
     <section class="controls">
-      <h3>Your location</h3>
-      <p class="controls-desc">Used to estimate distance from recent alerts. Choose a region or city, or use your device location.</p>
+      <h3>Region</h3>
+      <p class="controls-desc">Probability is computed per area. Select a region to see its estimate.</p>
       <div class="controls-grid">
         <div class="control-group">
-          <label>Region / city</label>
+          <label>Area</label>
           <select id="selectUserLocation"></select>
-          <div class="location-hint" id="locationHint"></div>
-        </div>
-        <div class="control-group control-group-btn">
-          <label>&nbsp;</label>
-          <button class="btn btn-primary" id="btnUseMyLocation">Use my location</button>
         </div>
       </div>
+    </section>
+
+    <section class="breakdown-section" id="breakdownSection" style="display: none;">
+      <h3>Probability breakdown</h3>
+      <p class="controls-desc" style="margin-bottom: 0.75rem;">How the estimate is built from sub-factors (percent contribution to total).</p>
+      <ul class="breakdown-list" id="breakdownList"></ul>
     </section>
 
     <section class="explanation">
@@ -685,9 +719,6 @@
       <p>
         The probability uses <strong>historical data</strong>: we compute the average time between consecutive sirens at each place, then see how the current &quot;time since last siren&quot; compares. <strong>Under</strong> the average gap → higher probability; <strong>over</strong> → lower. We also add time-of-day progression, distance from the last siren to your location, and a clustering bonus for multiple recent alerts. Result is smoothed and clamped between 0.5% and 99.4%.
       </p>
-      <div class="factors" id="factorsBreakdown">
-        <!-- Filled by JS -->
-      </div>
     </section>
 
     <footer>
@@ -750,24 +781,15 @@
       return { lat: 31.77, lon: 34.99, nameEn: raw, label: raw };
     }
 
-    // Regions and major cities only (for location dropdown when not using GPS)
-    const LOCATIONS = [
-      { id: 'center', name: 'Center (Gush Dan)', lat: 32.0853, lon: 34.7818 },
-      { id: 'tel-aviv', name: 'Tel Aviv', lat: 32.0853, lon: 34.7818 },
-      { id: 'jerusalem', name: 'Jerusalem', lat: 31.7683, lon: 35.2137 },
-      { id: 'north', name: 'North (Haifa area)', lat: 32.7940, lon: 34.9896 },
-      { id: 'haifa', name: 'Haifa', lat: 32.7940, lon: 34.9896 },
-      { id: 'south', name: 'South (Negev)', lat: 31.2518, lon: 34.7913 },
-      { id: 'beer-sheva', name: 'Beer Sheva', lat: 31.2518, lon: 34.7913 },
-      { id: 'ashdod', name: 'Ashdod', lat: 31.8044, lon: 34.6553 },
-      { id: 'ashkelon', name: 'Ashkelon', lat: 31.6697, lon: 34.5716 },
-      { id: 'netanya', name: 'Netanya', lat: 32.3320, lon: 34.8554 },
-      { id: 'rishon', name: 'Rishon LeZion', lat: 31.9640, lon: 34.8042 },
-      { id: 'petah-tikva', name: 'Petah Tikva', lat: 32.0871, lon: 34.8875 },
-      { id: 'eilat', name: 'Eilat', lat: 29.5577, lon: 34.9519 },
-      { id: 'sderot', name: 'Sderot', lat: 31.5257, lon: 34.5969 },
-      { id: 'tiberias', name: 'Tiberias', lat: 32.7957, lon: 35.5310 },
-      { id: 'nahariya', name: 'Nahariya', lat: 33.0081, lon: 35.0981 },
+    // Areas only (must match server REGIONS ids)
+    const REGIONS = [
+      { id: 'center', name: 'Center (Gush Dan)' },
+      { id: 'jerusalem', name: 'Jerusalem' },
+      { id: 'north', name: 'North (Haifa area)' },
+      { id: 'south', name: 'South (Negev)' },
+      { id: 'ashkelon', name: 'Ashkelon area' },
+      { id: 'eilat', name: 'Eilat' },
+      { id: 'galil', name: 'North East (Galil)' },
     ];
 
     let recentSirenEvents = [];
@@ -797,13 +819,21 @@
         const res = await fetch(base + '/ui-data.json', { method: 'GET', cache: 'no-store' });
         if (!res.ok) return false;
         const data = await res.json();
-        if (!data || data.timestamp == null) return false;
+        if (!data || !data.regions || typeof data.regions !== 'object') return false;
         serverUiData = data;
         useServerProbability = true;
         return true;
       } catch (e) {
         return false;
       }
+    }
+
+    function getSelectedRegionData() {
+      if (!serverUiData || !serverUiData.regions) return null;
+      const id = state.userLocationId;
+      if (serverUiData.regions[id]) return serverUiData.regions[id];
+      const firstId = Object.keys(serverUiData.regions)[0];
+      return firstId ? serverUiData.regions[firstId] : null;
     }
 
     // Support both API formats: (1) { data: string[] } or (2) array of { id, type, cities: string[] }
@@ -1119,10 +1149,10 @@
       if (el) el.textContent = str;
     }
 
-    function renderProbabilityGraph() {
+    function renderProbabilityGraph(pts) {
       const el = document.getElementById('probabilityGraph');
       if (!el) return;
-      const pts = (serverUiData && Array.isArray(serverUiData.history)) ? serverUiData.history : [];
+      pts = Array.isArray(pts) ? pts : [];
       if (pts.length < 1) {
         el.innerHTML = '<p style="margin:0;padding:1rem;color:var(--text-muted);font-size:0.85rem;">Collecting data…</p>';
         return;
@@ -1162,20 +1192,23 @@
     }
 
     function updateUI(skipWhenUnchanged) {
-      let probability, factors, averageGap, minutesUnderOver, minutesSinceLastSiren, recentAlertsCount, lastSirenLat, lastSirenLon;
-      if (useServerProbability && serverUiData) {
-        probability = serverUiData.probability;
-        factors = serverUiData.factors || {};
-        averageGap = serverUiData.averageGap;
-        minutesUnderOver = serverUiData.minutesUnderOver;
-        minutesSinceLastSiren = serverUiData.minutesSinceLastSiren;
-        recentAlertsCount = serverUiData.recentAlertsCount;
-        lastSirenLat = serverUiData.lastSirenLat;
-        lastSirenLon = serverUiData.lastSirenLon;
+      let probability, factors, averageGap, minutesUnderOver, minutesSinceLastSiren, recentAlertsCount, lastSirenLat, lastSirenLon, regionHistory;
+      const regionData = useServerProbability ? getSelectedRegionData() : null;
+      if (regionData) {
+        probability = regionData.probability;
+        factors = regionData.factors || {};
+        averageGap = regionData.averageGap;
+        minutesUnderOver = regionData.minutesUnderOver;
+        minutesSinceLastSiren = regionData.minutesSinceLastSiren;
+        recentAlertsCount = regionData.recentAlertsCount;
+        lastSirenLat = regionData.lastSirenLat;
+        lastSirenLon = regionData.lastSirenLon;
+        regionHistory = Array.isArray(regionData.history) ? regionData.history : [];
         state.lastDisplayedProbability = probability;
         const section = document.getElementById('probabilityGraphSection');
         if (section) section.style.display = '';
-        renderProbabilityGraph();
+        renderProbabilityGraph(regionHistory);
+        renderBreakdownList(regionData.breakdown);
       } else {
         const out = getSmoothedProbability();
         probability = out.probability;
@@ -1189,6 +1222,8 @@
         lastSirenLon = state.lastSirenLon;
         const section = document.getElementById('probabilityGraphSection');
         if (section) section.style.display = 'none';
+        const breakdownSection = document.getElementById('breakdownSection');
+        if (breakdownSection) breakdownSection.style.display = 'none';
       }
       const displayP = Math.round(probability * 10) / 10;
 
@@ -1227,7 +1262,7 @@
 
       const timeSinceStr = (minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren) < 60 ? `${(minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren)} min ago` : `${((minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren) / 60).toFixed(1)} h ago`;
       setIfChanged('cardTimeSince', timeSinceStr, String);
-      const distKm = haversineKm(state.userLat, state.userLon, lastSirenLat != null ? lastSirenLat : state.lastSirenLat, lastSirenLon != null ? lastSirenLon : state.lastSirenLon);
+      const distKm = regionData && regionData.distanceKm != null ? regionData.distanceKm : haversineKm(state.userLat, state.userLon, lastSirenLat != null ? lastSirenLat : state.lastSirenLat, lastSirenLon != null ? lastSirenLon : state.lastSirenLon);
       setIfChanged('cardDistance', distKm.toFixed(1) + ' km', String);
       const distPct = Math.min(100, (distKm / 100) * 100);
       document.getElementById('distanceVisualFill').style.width = `${100 - distPct}%`;
@@ -1237,30 +1272,14 @@
       const updatedStr = useServerProbability && serverUiData && serverUiData.timestamp ? new Date(serverUiData.timestamp).toLocaleTimeString() : (lastDataFetchTime ? new Date(lastDataFetchTime).toLocaleTimeString() : '—');
       setIfChanged('cardUpdated', updatedStr, String);
 
-      const factorsStr = [
-        `base: ${factors.base.toFixed(1)}%`,
-        `day: +${factors.day.toFixed(1)}%`,
-        `gap (vs avg): +${factors.gap.toFixed(1)}%`,
-        `distance: +${factors.distance.toFixed(1)}%`,
-        `cluster: +${factors.cluster.toFixed(1)}%`,
-      ].map(s => `<div>${s}</div>`).join('');
-      if (!skipWhenUnchanged || lastDisplayed.factorsBreakdown !== factorsStr) {
-        lastDisplayed.factorsBreakdown = factorsStr;
-        document.getElementById('factorsBreakdown').innerHTML = factorsStr;
-      }
-
       document.getElementById('ambientBg').style.opacity = 0.3 + (displayP / 100) * 0.2;
     }
 
     function syncLocationFromSelect() {
       const sel = document.getElementById('selectUserLocation');
-      const loc = LOCATIONS.find(l => l.id === (sel && sel.value));
-      if (loc) {
-        state.userLocationId = loc.id;
-        state.userLat = loc.lat;
-        state.userLon = loc.lon;
-        state.useGeolocation = false;
-        setLocationHint('');
+      const id = sel && sel.value;
+      if (id && REGIONS.some(r => r.id === id)) {
+        state.userLocationId = id;
         updateUI();
       }
     }
@@ -1268,15 +1287,30 @@
     function populateLocations() {
       const sel = document.getElementById('selectUserLocation');
       if (!sel) return;
-      sel.innerHTML = LOCATIONS.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
-      sel.value = state.userLocationId || LOCATIONS[0].id;
+      sel.innerHTML = REGIONS.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+      sel.value = state.userLocationId || REGIONS[0].id;
+    }
+
+    function renderBreakdownList(breakdown) {
+      const el = document.getElementById('breakdownList');
+      const section = document.getElementById('breakdownSection');
+      if (!el || !section) return;
+      if (!Array.isArray(breakdown) || breakdown.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+      section.style.display = '';
+      el.innerHTML = breakdown.map((item) => {
+        const valueStr = item.value != null ? `${item.value} ${item.valueUnit || ''}`.trim() : '—';
+        const percentStr = item.percentContrib != null ? `+${item.percentContrib}%` : '';
+        const desc = item.description ? ` <span class="breakdown-value">(${item.description})</span>` : '';
+        return `<li><span class="breakdown-label">${item.label}</span><span class="breakdown-value">${valueStr}</span><span class="breakdown-percent">${percentStr}</span>${desc}</li>`;
+      }).join('');
     }
 
     async function init() {
       populateLocations();
-      requestUserLocation();
       document.getElementById('selectUserLocation').addEventListener('change', syncLocationFromSelect);
-      document.getElementById('btnUseMyLocation').addEventListener('click', requestUserLocation);
 
       const hasServer = await fetchUiData();
       if (hasServer) {
