@@ -1,0 +1,63 @@
+# Fetches Pikud HaOref alerts and commits to this repo. Dashboard reads from same origin = no CORS, no request limit.
+# Free on public repos (unlimited Actions minutes).
+
+name: Fetch oref alerts
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # every 5 minutes
+  workflow_dispatch:        # run manually from Actions tab
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch oref and save
+        run: |
+          mkdir -p data
+          node -e "
+          const fs = require('fs');
+          const opts = {
+            headers: {
+              'Accept': 'application/json',
+              'Referer': 'https://www.oref.org.il/11226-he/pakar.aspx',
+              'X-Requested-With': 'XMLHttpRequest',
+              'User-Agent': 'Mozilla/5.0 (compatible; oref-fetch/1)'
+            }
+          };
+          const t = Math.floor(Date.now()/1000);
+          (async () => {
+            try {
+              let r = await fetch('https://www.oref.org.il/WarningMessages/alert/Alerts.json?t='+t, opts);
+              let b = await r.arrayBuffer();
+              let s = new TextDecoder('utf-8').decode(b);
+              if (b.byteLength>=2 && (new Uint8Array(b)[0]===0xFF && new Uint8Array(b)[1]===0xFE))
+                s = new TextDecoder('utf-16le').decode(b.slice(2));
+              const alerts = s.trim() ? JSON.parse(s) : {};
+              fs.writeFileSync('data/alerts.json', JSON.stringify(alerts), 'utf8');
+            } catch(e) { fs.writeFileSync('data/alerts.json', '{}', 'utf8'); }
+            try {
+              let r = await fetch('https://www.oref.org.il/WarningMessages/alert/History/AlertsHistory.json?t='+t, opts);
+              let b = await r.arrayBuffer();
+              let s = new TextDecoder('utf-8').decode(b);
+              if (b.byteLength>=2 && (new Uint8Array(b)[0]===0xFF && new Uint8Array(b)[1]===0xFE))
+                s = new TextDecoder('utf-16le').decode(b.slice(2));
+              const history = s.trim() ? JSON.parse(s) : [];
+              fs.writeFileSync('data/history.json', JSON.stringify(history), 'utf8');
+            } catch(e) { fs.writeFileSync('data/history.json', '[]', 'utf8'); }
+          })();
+          "
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/alerts.json data/history.json
+          git diff --staged --quiet || git commit -m "oref: update alerts [skip ci]"
+          git push

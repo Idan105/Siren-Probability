@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Siren Probability Dashboard — Experimental</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-deep: #0a0c12;
+      --bg-panel: rgba(18, 22, 32, 0.6);
+      --glass: rgba(255, 255, 255, 0.04);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --text-primary: #e8ecf4;
+      --text-muted: #8b95a8;
+      --accent-cyan: #00d4aa;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+      --accent-blue: #3b82f6;
+      --glow-low: rgba(0, 212, 170, 0.2);
+      --glow-mid: rgba(245, 158, 11, 0.25);
+      --glow-high: rgba(239, 68, 68, 0.3);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 212, 170, 0.08), transparent),
+        radial-gradient(ellipse 60% 40% at 80% 100%, rgba(59, 130, 246, 0.06), transparent);
+    }
+
+    /* Ambient background that reacts to probability */
+    .ambient-bg {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.4;
+      transition: opacity 0.8s ease;
+    }
+    .ambient-bg::before {
+      content: '';
+      position: absolute;
+      width: 200%;
+      height: 200%;
+      left: -50%;
+      top: -50%;
+      background: radial-gradient(circle at 50% 50%, transparent 0%, var(--bg-deep) 70%);
+      animation: ambientPulse 8s ease-in-out infinite;
+    }
+
+    @keyframes ambientPulse {
+      0%, 100% { transform: scale(1); opacity: 0.3; }
+      50% { transform: scale(1.05); opacity: 0.5; }
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      min-height: 100vh;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    header h1 {
+      font-weight: 600;
+      font-size: clamp(1.25rem, 3vw, 1.5rem);
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+    }
+
+    /* Main hero — gauge section */
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .gauge-wrapper {
+      position: relative;
+      width: min(320px, 85vw);
+      aspect-ratio: 1;
+      margin-bottom: 1rem;
+    }
+
+    .gauge-ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: conic-gradient(
+        from -90deg,
+        var(--gauge-fill, var(--accent-cyan)) 0deg,
+        var(--gauge-fill, var(--accent-cyan)) calc(var(--gauge-deg, 0) * 3.6deg),
+        rgba(255, 255, 255, 0.06) calc(var(--gauge-deg, 0) * 3.6deg),
+        rgba(255, 255, 255, 0.06) 360deg
+      );
+      transition: background 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      filter: drop-shadow(0 0 20px var(--gauge-glow, var(--glow-low)));
+    }
+    .gauge-ring::before {
+      content: '';
+      position: absolute;
+      inset: 8px;
+      border-radius: 50%;
+      background: var(--bg-deep);
+    }
+    .gauge-ring.pulse {
+      animation: gaugePulse 2s ease-in-out infinite;
+    }
+
+    @keyframes gaugePulse {
+      0%, 100% { filter: drop-shadow(0 0 20px var(--gauge-glow, var(--glow-low))); }
+      50% { filter: drop-shadow(0 0 35px var(--gauge-glow)); }
+    }
+
+    .gauge-inner {
+      position: absolute;
+      inset: 24px;
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+    }
+
+    .gauge-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: clamp(3rem, 12vw, 4.5rem);
+      font-weight: 600;
+      line-height: 1;
+      background: linear-gradient(135deg, var(--text-primary), var(--text-muted));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      transition: opacity 0.3s ease;
+    }
+
+    .gauge-suffix {
+      font-size: 1.25rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    .status-label {
+      font-size: 1rem;
+      font-weight: 500;
+      margin-top: 0.5rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      transition: all 0.3s ease;
+    }
+    .status-label.low { color: var(--accent-cyan); }
+    .status-label.elevated { color: var(--accent-amber); }
+    .status-label.high { color: var(--accent-amber); }
+    .status-label.very { color: var(--accent-red); }
+
+    .trend-arrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+    }
+    .trend-arrow span { font-size: 1rem; }
+
+    .subtitle {
+      text-align: center;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      max-width: 520px;
+      margin: 0 auto 1.5rem;
+      line-height: 1.5;
+    }
+
+    /* Info cards grid */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 1rem;
+      transition: border-color 0.2s ease;
+    }
+    .card:hover {
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+    .card-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.25rem;
+    }
+    .card-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem;
+      font-weight: 500;
+    }
+
+    /* Driver & disclaimer */
+    .driver-box {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+    .driver-box strong { color: var(--text-primary); }
+
+    .disclaimer {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      opacity: 0.9;
+      text-align: center;
+      margin-bottom: 1.5rem;
+      padding: 0.5rem;
+    }
+
+    /* Controls panel */
+    .controls {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .controls h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: var(--text-primary);
+    }
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .control-group label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 0.35rem;
+    }
+    .control-group select,
+    .control-group input {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+    }
+    .control-group input[type="number"] { width: 100%; }
+    .location-hint {
+      font-size: 0.75rem;
+      color: var(--accent-cyan);
+      margin-top: 0.25rem;
+    }
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      align-items: center;
+    }
+    .btn {
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: transform 0.15s ease, box-shadow 0.2s ease;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-cyan), #00a884);
+      color: var(--bg-deep);
+    }
+    .btn-primary:hover {
+      box-shadow: 0 0 20px var(--glow-low);
+    }
+    .btn-secondary {
+      background: var(--glass);
+      color: var(--text-primary);
+      border: 1px solid var(--glass-border);
+    }
+    .btn-secondary:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .toggle-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+    .toggle {
+      width: 44px;
+      height: 24px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 9999px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    .toggle.on {
+      background: rgba(0, 212, 170, 0.3);
+      border-color: var(--accent-cyan);
+    }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--text-primary);
+      top: 2px;
+      left: 2px;
+      transition: transform 0.2s ease;
+    }
+    .toggle.on::after {
+      transform: translateX(20px);
+    }
+
+    /* Mini timeline */
+    .timeline-section {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .timeline-section h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+    }
+    .timeline {
+      display: flex;
+      gap: 0.5rem;
+      overflow-x: auto;
+      padding-bottom: 0.5rem;
+      min-height: 56px;
+    }
+    .timeline::-webkit-scrollbar {
+      height: 6px;
+    }
+    .timeline::-webkit-scrollbar-track {
+      background: var(--glass);
+      border-radius: 3px;
+    }
+    .timeline::-webkit-scrollbar-thumb {
+      background: var(--glass-border);
+      border-radius: 3px;
+    }
+    .timeline-item {
+      flex-shrink: 0;
+      width: 80px;
+      padding: 0.5rem;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      font-size: 0.75rem;
+      text-align: center;
+    }
+    .timeline-item .city { font-weight: 500; color: var(--text-primary); }
+    .timeline-item .time { color: var(--text-muted); }
+
+    /* Explanation panel */
+    .explanation {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .explanation h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+    }
+    .explanation p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 0.5rem;
+    }
+
+    /* Factors breakdown */
+    .factors {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 1rem;
+      margin-top: 1rem;
+      font-size: 0.8rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-muted);
+    }
+    .factors div { margin-bottom: 0.25rem; }
+    .factors div:last-child { margin-bottom: 0; }
+
+    /* Distance visual */
+    .distance-visual {
+      height: 8px;
+      background: var(--glass);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 0.25rem;
+    }
+    .distance-visual-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-amber));
+      border-radius: 4px;
+      transition: width 0.4s ease;
+    }
+
+    footer {
+      text-align: center;
+      padding: 1rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="ambient-bg" id="ambientBg"></div>
+  <div class="app">
+    <header>
+      <h1>Siren Probability Dashboard</h1>
+    </header>
+
+    <section class="hero">
+      <div class="gauge-wrapper">
+        <div class="gauge-ring" id="gaugeRing"></div>
+        <div class="gauge-inner">
+          <span class="gauge-value" id="gaugeValue">—</span>
+          <span class="gauge-suffix">%</span>
+          <span class="status-label" id="statusLabel">—</span>
+          <div class="trend-arrow" id="trendArrow">
+            <span id="trendIcon">—</span>
+            <span id="trendText">—</span>
+          </div>
+        </div>
+      </div>
+      <p class="subtitle">
+        Experimental estimate based on recent siren activity, time progression, and distance weighting.
+      </p>
+    </section>
+
+    <div class="driver-box" id="driverBox">
+      <strong>Main driver:</strong> <span id="driverText">—</span>
+    </div>
+
+    <p class="disclaimer">
+      This is not an official alert system. Do not rely on it for safety decisions. For official alerts, use approved civil defense sources.
+    </p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-label">Time since last siren</div>
+        <div class="card-value" id="cardTimeSince">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Distance from last siren</div>
+        <div class="card-value" id="cardDistance">—</div>
+        <div class="distance-visual">
+          <div class="distance-visual-fill" id="distanceVisualFill" style="width: 0%"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">Recent alerts (60 min)</div>
+        <div class="card-value" id="cardRecentCount">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Data source</div>
+        <div class="card-value" id="cardDataSource">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Last update</div>
+        <div class="card-value" id="cardUpdated">—</div>
+      </div>
+    </div>
+
+    <section class="controls">
+      <h3>Simulate inputs</h3>
+      <div class="controls-grid">
+        <div class="control-group">
+          <label>Your location</label>
+          <select id="selectUserCity"></select>
+          <div class="location-hint" id="locationHint"></div>
+        </div>
+        <div class="control-group">
+          <label>Last siren location</label>
+          <select id="selectSirenCity"></select>
+        </div>
+        <div class="control-group">
+          <label>Minutes since last siren</label>
+          <input type="number" id="inputMinutesSince" min="0" max="1440" value="45" />
+        </div>
+        <div class="control-group">
+          <label>Recent alerts (last 60 min)</label>
+          <input type="number" id="inputRecentAlerts" min="0" max="20" value="2" />
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnSimulateSiren">Simulate new siren now</button>
+        <button class="btn btn-secondary" id="btnReset">Reset to defaults</button>
+        <div class="toggle-wrap">
+          <div class="toggle on" id="toggleLive" title="Live mode"></div>
+          <span>Live mode (updates every second)</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="timeline-section">
+      <h3>Recent siren events</h3>
+      <div class="timeline" id="timeline"></div>
+    </section>
+
+    <section class="explanation">
+      <h3>How this estimate works</h3>
+      <p>
+        The probability is a heuristic combining: (1) a base risk floor, (2) time-of-day progression so tension builds through the day non-linearly,
+        (3) recency of the last siren with exponential decay, (4) distance from the last siren to your location (closer = stronger effect),
+        and (5) a clustering bonus when multiple alerts occurred recently. The result is smoothed and clamped between 0.5% and 99.4%.
+      </p>
+      <div class="factors" id="factorsBreakdown">
+        <!-- Filled by JS -->
+      </div>
+    </section>
+
+    <footer>
+      Data from Pikud HaOref, updated by GitHub Actions every 5 minutes. When you see &quot;Demo data&quot;, the workflow may not have run yet or data is empty. Not an official alert system.
+    </footer>
+  </div>
+
+  <script>
+    // ========== PIKUD HAOREF (Home Front Command) DATA ==========
+    // GitHub Actions (.github/workflows/fetch-oref.yml) fetches from oref and writes data/alerts.json, data/history.json.
+    // Dashboard reads same-origin from this path — no CORS, no request limit on GitHub Pages.
+    const OREF_JSON_DATA_PATH = 'data';
+
+    // Hebrew city names (from Pikud HaOref API) → coordinates for distance calc.
+    const HEBREW_TO_COORDS = {
+      'תל אביב': { lat: 32.0853, lon: 34.7818, nameEn: 'Tel Aviv' },
+      'תל-אביב': { lat: 32.0853, lon: 34.7818, nameEn: 'Tel Aviv' },
+      'ירושלים': { lat: 31.7683, lon: 35.2137, nameEn: 'Jerusalem' },
+      'חיפה': { lat: 32.7940, lon: 34.9896, nameEn: 'Haifa' },
+      'באר שבע': { lat: 31.2518, lon: 34.7913, nameEn: 'Beer Sheva' },
+      'אשדוד': { lat: 31.8044, lon: 34.6553, nameEn: 'Ashdod' },
+      'נתניה': { lat: 32.3320, lon: 34.8554, nameEn: 'Netanya' },
+      'ראשון לציון': { lat: 31.9640, lon: 34.8042, nameEn: 'Rishon LeZion' },
+      'פתח תקווה': { lat: 32.0871, lon: 34.8875, nameEn: 'Petah Tikva' },
+      'אילת': { lat: 29.5577, lon: 34.9519, nameEn: 'Eilat' },
+      'שדרות': { lat: 31.5257, lon: 34.5969, nameEn: 'Sderot' },
+      'אשקלון': { lat: 31.6697, lon: 34.5716, nameEn: 'Ashkelon' },
+      'ניר עם': { lat: 31.5192, lon: 34.5831, nameEn: 'Nir Am' },
+      'איבים': { lat: 31.5333, lon: 34.6000, nameEn: 'Ivim' },
+      'עין השלושה': { lat: 31.3667, lon: 34.4000, nameEn: 'Ein HaShlosha' },
+      'סעד': { lat: 31.4708, lon: 34.5347, nameEn: 'Saad' },
+      'מבטחים': { lat: 31.4167, lon: 34.5667, nameEn: 'Mivtachim' },
+      'כיסופים': { lat: 31.3667, lon: 34.4000, nameEn: 'Kissufim' },
+      'גבולות': { lat: 31.2167, lon: 34.4667, nameEn: 'Gvulot' },
+      'נחל עוז': { lat: 31.4833, lon: 34.5000, nameEn: 'Nahal Oz' },
+      'קריית גת': { lat: 31.6097, lon: 34.7642, nameEn: 'Kiryat Gat' },
+      'קריית שמונה': { lat: 33.2079, lon: 35.5702, nameEn: 'Kiryat Shmona' },
+      'דימונה': { lat: 31.0667, lon: 35.0333, nameEn: 'Dimona' },
+      'טבריה': { lat: 32.7957, lon: 35.5310, nameEn: 'Tiberias' },
+      'אופקים': { lat: 31.2833, lon: 34.6167, nameEn: 'Ofakim' },
+      'נהריה': { lat: 33.0081, lon: 35.0981, nameEn: 'Nahariya' },
+      'רמלה': { lat: 31.9294, lon: 34.8656, nameEn: 'Ramla' },
+      'לוד': { lat: 31.9514, lon: 34.8953, nameEn: 'Lod' },
+      'בת ים': { lat: 32.0238, lon: 34.7514, nameEn: 'Bat Yam' },
+      'חולון': { lat: 32.0103, lon: 34.7792, nameEn: 'Holon' },
+      'באר יעקב': { lat: 31.9667, lon: 34.8333, nameEn: 'Beer Yaakov' },
+      'גבעתיים': { lat: 32.0722, lon: 34.8128, nameEn: 'Givatayim' },
+      'בית שמש': { lat: 31.7514, lon: 34.9889, nameEn: 'Beit Shemesh' },
+      'עפולה': { lat: 32.6092, lon: 35.2892, nameEn: 'Afula' },
+      'כל הארץ': { lat: 31.7683, lon: 35.2137, nameEn: 'Nationwide' },
+      'ברחבי הארץ': { lat: 31.7683, lon: 35.2137, nameEn: 'Nationwide' },
+    };
+
+    function resolveHebrewCityToCoords(hebrewLabel) {
+      if (!hebrewLabel || typeof hebrewLabel !== 'string') return null;
+      const raw = hebrewLabel.trim();
+      const base = raw.split(/\s*[-–]\s*/)[0].trim();
+      if (HEBREW_TO_COORDS[base]) return { ...HEBREW_TO_COORDS[base], label: raw };
+      if (HEBREW_TO_COORDS[raw]) return { ...HEBREW_TO_COORDS[raw], label: raw };
+      return { lat: 31.77, lon: 34.99, nameEn: raw, label: raw };
+    }
+
+    const CITIES = [
+      { id: 'tel-aviv', name: 'Tel Aviv', lat: 32.0853, lon: 34.7818 },
+      { id: 'jerusalem', name: 'Jerusalem', lat: 31.7683, lon: 35.2137 },
+      { id: 'haifa', name: 'Haifa', lat: 32.7940, lon: 34.9896 },
+      { id: 'beer-sheva', name: 'Beer Sheva', lat: 31.2518, lon: 34.7913 },
+      { id: 'ashdod', name: 'Ashdod', lat: 31.8044, lon: 34.6553 },
+      { id: 'netanya', name: 'Netanya', lat: 32.3320, lon: 34.8554 },
+      { id: 'rishon', name: 'Rishon LeZion', lat: 31.9640, lon: 34.8042 },
+      { id: 'petah-tikva', name: 'Petah Tikva', lat: 32.0871, lon: 34.8875 },
+      { id: 'eilat', name: 'Eilat', lat: 29.5577, lon: 34.9519 },
+      { id: 'sderot', name: 'Sderot', lat: 31.5257, lon: 34.5969 },
+    ];
+
+    let recentSirenEvents = [];
+    let dataSource = 'demo';
+    let state = {
+      userCityId: 'tel-aviv',
+      userLat: 32.0853,
+      userLon: 34.7818,
+      useGeolocation: false,
+      lastSirenCityId: null,
+      lastSirenLat: 32.0853,
+      lastSirenLon: 34.7818,
+      minutesSinceLastSiren: 120,
+      recentAlertsCount: 0,
+      liveMode: true,
+      previousProbability: 50,
+      lastDisplayedProbability: 50,
+    };
+
+    async function fetchOrefFromDataPath() {
+      const base = OREF_JSON_DATA_PATH.replace(/\/$/, '');
+      try {
+        const res = await fetch(base + '/alerts.json', { method: 'GET', cache: 'no-store' });
+        if (!res.ok) throw new Error(res.status);
+        const json = await res.json();
+        const out = parseAlertsJson(json, false);
+        if (out.alerts && out.alerts.length > 0) return out;
+        const resH = await fetch(base + '/history.json', { method: 'GET', cache: 'no-store' });
+        if (!resH.ok) throw new Error(resH.status);
+        const jsonH = await resH.json();
+        return parseAlertsHistoryJson(Array.isArray(jsonH) ? jsonH : []);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    async function fetchOrefAlerts() {
+      if (!OREF_JSON_DATA_PATH) return null;
+      return fetchOrefFromDataPath();
+    }
+
+    function parseAlertsJson(json, fromHistory) {
+      const alerts = [];
+      if (!json || !json.data || !Array.isArray(json.data)) return { alerts: [], fromHistory };
+      const ts = json.timestamp ? json.timestamp * 1000 : (json.id ? parseInt(json.id, 10) : Date.now());
+      for (const cityLabel of json.data) {
+        if (!cityLabel || String(cityLabel).indexOf('בדיקה') !== -1) continue;
+        const coords = resolveHebrewCityToCoords(cityLabel);
+        if (coords) {
+          alerts.push({
+            ts: ts,
+            city: coords.nameEn,
+            cityHebrew: coords.label,
+            lat: coords.lat,
+            lon: coords.lon,
+            id: json.id,
+            type: json.cat || '1',
+          });
+        }
+      }
+      return { alerts, fromHistory };
+    }
+
+    function parseAlertsHistoryJson(json) {
+      const alerts = [];
+      if (!Array.isArray(json)) return { alerts: [], fromHistory: true };
+      const nowSec = Date.now() / 1000;
+      for (const item of json) {
+        if (!item.data || !item.alertDate) continue;
+        const unix = new Date(item.alertDate).getTime() / 1000;
+        if (nowSec - unix > 120) continue;
+        if (String(item.data).indexOf('בדיקה') !== -1) continue;
+        const coords = resolveHebrewCityToCoords(item.data);
+        if (coords) {
+          alerts.push({
+            ts: unix * 1000,
+            city: coords.nameEn,
+            cityHebrew: coords.label,
+            lat: coords.lat,
+            lon: coords.lon,
+            id: item.alertDate,
+            type: item.category || '1',
+          });
+        }
+      }
+      return { alerts, fromHistory: true };
+    }
+
+    function mergeApiAlertsIntoState(result) {
+      if (!result) return;
+      dataSource = 'api';
+      const now = Date.now();
+      const oneHourAgo = now - 60 * 60 * 1000;
+      if (result.alerts && result.alerts.length > 0) {
+        for (const a of result.alerts) {
+          const existing = recentSirenEvents.find(e => Math.abs(e.ts - a.ts) < 60000 && e.city === a.city);
+          if (!existing) {
+            recentSirenEvents.unshift({
+              ts: a.ts,
+              cityId: null,
+              city: a.city,
+              cityHebrew: a.cityHebrew,
+              lat: a.lat,
+              lon: a.lon,
+            });
+          }
+        }
+      }
+      recentSirenEvents = recentSirenEvents.filter(e => e.ts > oneHourAgo - 60000).slice(0, 50);
+      const sorted = [...recentSirenEvents].sort((x, y) => y.ts - x.ts);
+      const latest = sorted[0];
+      if (latest) {
+        state.lastSirenLat = latest.lat;
+        state.lastSirenLon = latest.lon;
+        state.lastSirenCityId = null;
+        state.minutesSinceLastSiren = (now - latest.ts) / (60 * 1000);
+      }
+      state.recentAlertsCount = recentSirenEvents.filter(e => e.ts >= oneHourAgo).length;
+      document.getElementById('inputMinutesSince').value = Math.round(state.minutesSinceLastSiren);
+      document.getElementById('inputRecentAlerts').value = state.recentAlertsCount;
+      renderTimeline();
+      updateUI();
+    }
+
+    let orefPollTimer = null;
+    const POLL_INTERVAL_WHEN_LIVE_MS = 5000;
+    const POLL_INTERVAL_WHEN_FAILING_MS = 30000;
+    function startOrefPolling() {
+      if (orefPollTimer) return;
+      let currentInterval = POLL_INTERVAL_WHEN_FAILING_MS;
+      function poll() {
+        fetchOrefAlerts().then(function (result) {
+          if (result) {
+            mergeApiAlertsIntoState(result);
+            if (currentInterval !== POLL_INTERVAL_WHEN_LIVE_MS) {
+              currentInterval = POLL_INTERVAL_WHEN_LIVE_MS;
+              clearInterval(orefPollTimer);
+              orefPollTimer = setInterval(poll, POLL_INTERVAL_WHEN_LIVE_MS);
+            }
+          }
+        }).catch(function () {});
+      }
+      poll();
+      orefPollTimer = setInterval(poll, currentInterval);
+    }
+
+    function requestUserLocation() {
+      if (!navigator.geolocation) {
+        setLocationHint('Location not supported');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          state.userLat = pos.coords.latitude;
+          state.userLon = pos.coords.longitude;
+          state.useGeolocation = true;
+          state.userCityId = null;
+          setLocationHint('Using your location');
+          updateUI();
+        },
+        function () {
+          state.useGeolocation = false;
+          setLocationHint('Using city selection');
+          if (state.userCityId) document.getElementById('selectUserCity').value = state.userCityId;
+          updateUI();
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      );
+    }
+
+    function setLocationHint(text) {
+      const el = document.getElementById('locationHint');
+      if (el) el.textContent = text;
+    }
+
+    function haversineKm(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    const CONFIG = {
+      baseFloor: 2,
+      dailyMaxBoost: 25,
+      recencyHalfLifeMinutes: 30,
+      distanceScaleKm: 50,
+      clusterBonusPerAlert: 3,
+      maxClusterBonus: 15,
+      minP: 0.5,
+      maxP: 99.4,
+      smoothing: 0.12,
+    };
+
+    function getDayProgression() {
+      const now = new Date();
+      const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
+      const dayMinutes = 24 * 60;
+      const t = minutesSinceMidnight / dayMinutes;
+      return Math.pow(t, 0.7) + 0.15 * Math.sin(t * Math.PI * 2);
+    }
+
+    function getRecencyBoost(minutesSince) {
+      if (minutesSince < 0) minutesSince = 0;
+      const decay = Math.exp(-(minutesSince / CONFIG.recencyHalfLifeMinutes) * Math.LN2);
+      return decay * 40;
+    }
+
+    function getDistanceImpact(userLat, userLon, sirenLat, sirenLon) {
+      const km = haversineKm(userLat, userLon, sirenLat, sirenLon);
+      if (km < 1) return 25;
+      const factor = Math.exp(-km / CONFIG.distanceScaleKm);
+      return factor * 25;
+    }
+
+    function getClusterBonus(count) {
+      return Math.min(count * CONFIG.clusterBonusPerAlert, CONFIG.maxClusterBonus);
+    }
+
+    function computeRawProbability() {
+      const dayProg = Math.max(0, getDayProgression());
+      const dayContrib = dayProg * CONFIG.dailyMaxBoost;
+      const recencyContrib = getRecencyBoost(state.minutesSinceLastSiren);
+      const distanceContrib = getDistanceImpact(state.userLat, state.userLon, state.lastSirenLat, state.lastSirenLon);
+      const clusterContrib = getClusterBonus(state.recentAlertsCount);
+      let raw = CONFIG.baseFloor + dayContrib + recencyContrib + distanceContrib + clusterContrib;
+      raw = Math.max(CONFIG.minP, Math.min(CONFIG.maxP, raw));
+      return {
+        probability: raw,
+        factors: {
+          base: CONFIG.baseFloor,
+          day: dayContrib,
+          recency: recencyContrib,
+          distance: distanceContrib,
+          cluster: clusterContrib,
+        },
+      };
+    }
+
+    function getSmoothedProbability() {
+      const { probability, factors } = computeRawProbability();
+      const smooth = state.previousProbability + (probability - state.previousProbability) * CONFIG.smoothing;
+      const clamped = Math.max(CONFIG.minP, Math.min(CONFIG.maxP, smooth));
+      state.previousProbability = clamped;
+      return { probability: clamped, factors };
+    }
+
+    function getMainDriver(factors) {
+      const arr = [
+        { name: 'Time-based escalation', v: factors.day },
+        { name: 'Recent nearby alert', v: factors.recency + factors.distance },
+        { name: 'Recent alert cluster', v: factors.cluster },
+      ];
+      arr.sort((a, b) => b.v - a.v);
+      return arr[0].v > 1 ? arr[0].name : 'Base risk level';
+    }
+
+    function getStatusLabel(p) {
+      if (p < 15) return { text: 'Low Risk', class: 'low' };
+      if (p < 35) return { text: 'Elevated', class: 'elevated' };
+      if (p < 60) return { text: 'High Alertness', class: 'high' };
+      return { text: 'Very Elevated', class: 'very' };
+    }
+
+    function getTrend(prev, curr) {
+      const d = curr - prev;
+      if (d > 0.3) return { icon: '↑', text: 'Rising' };
+      if (d < -0.3) return { icon: '↓', text: 'Falling' };
+      return { icon: '→', text: 'Stable' };
+    }
+
+    function getGaugeColor(p) {
+      if (p < 25) return { fill: 'var(--accent-cyan)', glow: 'var(--glow-low)' };
+      if (p < 55) return { fill: 'var(--accent-amber)', glow: 'var(--glow-mid)' };
+      return { fill: 'var(--accent-red)', glow: 'var(--glow-high)' };
+    }
+
+    function updateUI() {
+      const { probability, factors } = getSmoothedProbability();
+      const displayP = Math.round(probability * 10) / 10;
+
+      const gaugeDeg = (displayP / 100) * 360;
+      const colors = getGaugeColor(displayP);
+      const ring = document.getElementById('gaugeRing');
+      ring.style.setProperty('--gauge-deg', gaugeDeg);
+      ring.style.setProperty('--gauge-fill', colors.fill);
+      ring.style.setProperty('--gauge-glow', colors.glow);
+      ring.classList.toggle('pulse', displayP >= 50);
+
+      document.getElementById('gaugeValue').textContent = displayP.toFixed(1);
+      const status = getStatusLabel(displayP);
+      const statusEl = document.getElementById('statusLabel');
+      statusEl.textContent = status.text;
+      statusEl.className = 'status-label ' + status.class;
+
+      const trend = getTrend(state.lastDisplayedProbability, probability);
+      state.lastDisplayedProbability = probability;
+      document.getElementById('trendIcon').textContent = trend.icon;
+      document.getElementById('trendText').textContent = trend.text;
+
+      document.getElementById('driverText').textContent = getMainDriver(factors);
+
+      document.getElementById('cardTimeSince').textContent =
+        state.minutesSinceLastSiren < 60
+          ? `${state.minutesSinceLastSiren} min ago`
+          : `${(state.minutesSinceLastSiren / 60).toFixed(1)} h ago`;
+      const distKm = haversineKm(state.userLat, state.userLon, state.lastSirenLat, state.lastSirenLon);
+      document.getElementById('cardDistance').textContent = `${distKm.toFixed(1)} km`;
+      const distPct = Math.min(100, (distKm / 100) * 100);
+      document.getElementById('distanceVisualFill').style.width = `${100 - distPct}%`;
+      document.getElementById('cardRecentCount').textContent = state.recentAlertsCount;
+      document.getElementById('cardDataSource').textContent = dataSource === 'api' ? 'Live (Pikud HaOref)' : 'Demo data';
+      document.getElementById('cardUpdated').textContent = new Date().toLocaleTimeString();
+
+      document.getElementById('factorsBreakdown').innerHTML = [
+        `base: ${factors.base.toFixed(1)}%`,
+        `day: +${factors.day.toFixed(1)}%`,
+        `recency: +${factors.recency.toFixed(1)}%`,
+        `distance: +${factors.distance.toFixed(1)}%`,
+        `cluster: +${factors.cluster.toFixed(1)}%`,
+      ].map(s => `<div>${s}</div>`).join('');
+
+      document.getElementById('ambientBg').style.opacity = 0.3 + (displayP / 100) * 0.2;
+    }
+
+    function renderTimeline() {
+      const sorted = [...recentSirenEvents].sort((a, b) => b.ts - a.ts).slice(0, 12);
+      const html = sorted.map(e => {
+        const mins = Math.round((Date.now() - e.ts) / 60000);
+        const label = e.cityHebrew || e.city;
+        return `<div class="timeline-item"><div class="city">${label}</div><div class="time">${mins} min ago</div></div>`;
+      }).join('');
+      document.getElementById('timeline').innerHTML = html || '<div class="timeline-item">No recent events</div>';
+    }
+
+    function syncStateFromInputs() {
+      state.minutesSinceLastSiren = parseInt(document.getElementById('inputMinutesSince').value, 10) || 0;
+      state.recentAlertsCount = parseInt(document.getElementById('inputRecentAlerts').value, 10) || 0;
+      const userCity = CITIES.find(c => c.id === document.getElementById('selectUserCity').value);
+      const sirenCity = CITIES.find(c => c.id === document.getElementById('selectSirenCity').value);
+      if (userCity) {
+        state.userCityId = userCity.id;
+        state.userLat = userCity.lat;
+        state.userLon = userCity.lon;
+        state.useGeolocation = false;
+        setLocationHint('');
+      }
+      if (sirenCity) {
+        state.lastSirenCityId = sirenCity.id;
+        state.lastSirenLat = sirenCity.lat;
+        state.lastSirenLon = sirenCity.lon;
+      }
+    }
+
+    function populateCities() {
+      const opts = CITIES.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      document.getElementById('selectUserCity').innerHTML = opts;
+      document.getElementById('selectSirenCity').innerHTML = opts;
+      if (state.userCityId) document.getElementById('selectUserCity').value = state.userCityId;
+      if (state.lastSirenCityId) document.getElementById('selectSirenCity').value = state.lastSirenCityId;
+      else document.getElementById('selectSirenCity').value = CITIES[0].id;
+    }
+
+    function simulateNewSiren() {
+      const city = CITIES.find(c => c.id === document.getElementById('selectSirenCity').value) || CITIES[0];
+      recentSirenEvents.unshift({
+        ts: Date.now(),
+        cityId: city.id,
+        city: city.name,
+        lat: city.lat,
+        lon: city.lon,
+      });
+      recentSirenEvents = recentSirenEvents.slice(0, 20);
+      state.lastSirenLat = city.lat;
+      state.lastSirenLon = city.lon;
+      state.lastSirenCityId = city.id;
+      state.minutesSinceLastSiren = 0;
+      state.recentAlertsCount = Math.min(state.recentAlertsCount + 1, 20);
+      document.getElementById('inputMinutesSince').value = 0;
+      document.getElementById('inputRecentAlerts').value = state.recentAlertsCount;
+      document.getElementById('selectSirenCity').value = city.id;
+      renderTimeline();
+      updateUI();
+    }
+
+    function resetDefaults() {
+      state = {
+        userCityId: 'tel-aviv',
+        userLat: 32.0853,
+        userLon: 34.7818,
+        useGeolocation: false,
+        lastSirenCityId: 'tel-aviv',
+        lastSirenLat: 32.0853,
+        lastSirenLon: 34.7818,
+        minutesSinceLastSiren: 45,
+        recentAlertsCount: 2,
+        liveMode: state.liveMode,
+        previousProbability: 50,
+        lastDisplayedProbability: 50,
+      };
+      dataSource = 'demo';
+      recentSirenEvents = [
+        { ts: Date.now() - 45 * 60 * 1000, cityId: 'tel-aviv', city: 'Tel Aviv', lat: 32.0853, lon: 34.7818 },
+        { ts: Date.now() - 78 * 60 * 1000, cityId: 'rishon', city: 'Rishon LeZion', lat: 31.9640, lon: 34.8042 },
+        { ts: Date.now() - 120 * 60 * 1000, cityId: 'ashdod', city: 'Ashdod', lat: 31.8044, lon: 34.6553 },
+      ];
+      document.getElementById('inputMinutesSince').value = 45;
+      document.getElementById('inputRecentAlerts').value = 2;
+      document.getElementById('selectUserCity').value = 'tel-aviv';
+      document.getElementById('selectSirenCity').value = 'tel-aviv';
+      setLocationHint('');
+      renderTimeline();
+      updateUI();
+    }
+
+    let liveInterval = null;
+    function tickLive() {
+      state.minutesSinceLastSiren += 1 / 60;
+      document.getElementById('inputMinutesSince').value = Math.round(state.minutesSinceLastSiren);
+      syncStateFromInputs();
+      updateUI();
+    }
+
+    function setLiveMode(on) {
+      state.liveMode = on;
+      document.getElementById('toggleLive').classList.toggle('on', on);
+      if (on && !liveInterval) {
+        liveInterval = setInterval(tickLive, 1000);
+      } else if (!on && liveInterval) {
+        clearInterval(liveInterval);
+        liveInterval = null;
+      }
+    }
+
+    function init() {
+      populateCities();
+      if (recentSirenEvents.length === 0) {
+        recentSirenEvents = [
+          { ts: Date.now() - 45 * 60 * 1000, cityId: 'tel-aviv', city: 'Tel Aviv', lat: 32.0853, lon: 34.7818 },
+          { ts: Date.now() - 78 * 60 * 1000, cityId: 'rishon', city: 'Rishon LeZion', lat: 31.9640, lon: 34.8042 },
+          { ts: Date.now() - 120 * 60 * 1000, cityId: 'ashdod', city: 'Ashdod', lat: 31.8044, lon: 34.6553 },
+        ];
+        state.minutesSinceLastSiren = 45;
+        state.recentAlertsCount = 2;
+        state.lastSirenLat = 32.0853;
+        state.lastSirenLon = 34.7818;
+        state.lastSirenCityId = 'tel-aviv';
+      }
+      renderTimeline();
+      updateUI();
+
+      requestUserLocation();
+
+      document.getElementById('selectUserCity').addEventListener('change', () => { syncStateFromInputs(); updateUI(); });
+      document.getElementById('selectSirenCity').addEventListener('change', () => { syncStateFromInputs(); updateUI(); });
+      document.getElementById('inputMinutesSince').addEventListener('change', () => { syncStateFromInputs(); updateUI(); });
+      document.getElementById('inputRecentAlerts').addEventListener('change', () => { syncStateFromInputs(); updateUI(); });
+
+      document.getElementById('btnSimulateSiren').addEventListener('click', simulateNewSiren);
+      document.getElementById('btnReset').addEventListener('click', resetDefaults);
+
+      document.getElementById('toggleLive').addEventListener('click', () => setLiveMode(!state.liveMode));
+
+      setLiveMode(true);
+      startOrefPolling();
+    }
+
+    init();
+  </script>
+</body>
+</html>
