@@ -35,22 +35,32 @@ jobs:
           (async () => {
             try {
               let r = await fetch('https://www.oref.org.il/WarningMessages/alert/Alerts.json?t='+t, opts);
+              console.log('Alerts.json status:', r.status, r.statusText);
               let b = await r.arrayBuffer();
               let s = new TextDecoder('utf-8').decode(b);
               if (b.byteLength>=2 && (new Uint8Array(b)[0]===0xFF && new Uint8Array(b)[1]===0xFE))
                 s = new TextDecoder('utf-16le').decode(b.slice(2));
               const alerts = s.trim() ? JSON.parse(s) : {};
               fs.writeFileSync('data/alerts.json', JSON.stringify(alerts), 'utf8');
-            } catch(e) { fs.writeFileSync('data/alerts.json', '{}', 'utf8'); }
+              console.log('Alerts: got', typeof alerts === 'object' && alerts.data ? alerts.data.length : (Array.isArray(alerts) ? alerts.length : 0), 'items');
+            } catch(e) {
+              console.log('Alerts fetch error:', e.message);
+              fs.writeFileSync('data/alerts.json', '{}', 'utf8');
+            }
             try {
               let r = await fetch('https://www.oref.org.il/WarningMessages/alert/History/AlertsHistory.json?t='+t, opts);
+              console.log('History status:', r.status, r.statusText);
               let b = await r.arrayBuffer();
               let s = new TextDecoder('utf-8').decode(b);
               if (b.byteLength>=2 && (new Uint8Array(b)[0]===0xFF && new Uint8Array(b)[1]===0xFE))
                 s = new TextDecoder('utf-16le').decode(b.slice(2));
               const history = s.trim() ? JSON.parse(s) : [];
               fs.writeFileSync('data/history.json', JSON.stringify(history), 'utf8');
-            } catch(e) { fs.writeFileSync('data/history.json', '[]', 'utf8'); }
+              console.log('History: got', Array.isArray(history) ? history.length : 0, 'items');
+            } catch(e) {
+              console.log('History fetch error:', e.message);
+              fs.writeFileSync('data/history.json', '[]', 'utf8');
+            }
           })();
           "
 

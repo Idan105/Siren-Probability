@@ -262,9 +262,16 @@
     .controls h3 {
       font-size: 0.95rem;
       font-weight: 600;
-      margin-bottom: 1rem;
+      margin-bottom: 0.5rem;
       color: var(--text-primary);
     }
+    .controls-desc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      line-height: 1.4;
+    }
+    .control-group-btn .btn { margin-top: 0; }
     .controls-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -525,32 +532,17 @@
     </div>
 
     <section class="controls">
-      <h3>Simulate inputs</h3>
+      <h3>Your location</h3>
+      <p class="controls-desc">Used to estimate distance from recent alerts. Choose a region or city, or use your device location.</p>
       <div class="controls-grid">
         <div class="control-group">
-          <label>Your location</label>
-          <select id="selectUserCity"></select>
+          <label>Region / city</label>
+          <select id="selectUserLocation"></select>
           <div class="location-hint" id="locationHint"></div>
         </div>
-        <div class="control-group">
-          <label>Last siren location</label>
-          <select id="selectSirenCity"></select>
-        </div>
-        <div class="control-group">
-          <label>Minutes since last siren</label>
-          <input type="number" id="inputMinutesSince" min="0" max="1440" value="45" />
-        </div>
-        <div class="control-group">
-          <label>Recent alerts (last 60 min)</label>
-          <input type="number" id="inputRecentAlerts" min="0" max="20" value="2" />
-        </div>
-      </div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btnSimulateSiren">Simulate new siren now</button>
-        <button class="btn btn-secondary" id="btnReset">Reset to defaults</button>
-        <div class="toggle-wrap">
-          <div class="toggle on" id="toggleLive" title="Live mode"></div>
-          <span>Live mode (updates every second)</span>
+        <div class="control-group control-group-btn">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" id="btnUseMyLocation">Use my location</button>
         </div>
       </div>
     </section>
@@ -632,32 +624,38 @@
       return { lat: 31.77, lon: 34.99, nameEn: raw, label: raw };
     }
 
-    const CITIES = [
+    // Regions and major cities only (for location dropdown when not using GPS)
+    const LOCATIONS = [
+      { id: 'center', name: 'Center (Gush Dan)', lat: 32.0853, lon: 34.7818 },
       { id: 'tel-aviv', name: 'Tel Aviv', lat: 32.0853, lon: 34.7818 },
       { id: 'jerusalem', name: 'Jerusalem', lat: 31.7683, lon: 35.2137 },
+      { id: 'north', name: 'North (Haifa area)', lat: 32.7940, lon: 34.9896 },
       { id: 'haifa', name: 'Haifa', lat: 32.7940, lon: 34.9896 },
+      { id: 'south', name: 'South (Negev)', lat: 31.2518, lon: 34.7913 },
       { id: 'beer-sheva', name: 'Beer Sheva', lat: 31.2518, lon: 34.7913 },
       { id: 'ashdod', name: 'Ashdod', lat: 31.8044, lon: 34.6553 },
+      { id: 'ashkelon', name: 'Ashkelon', lat: 31.6697, lon: 34.5716 },
       { id: 'netanya', name: 'Netanya', lat: 32.3320, lon: 34.8554 },
       { id: 'rishon', name: 'Rishon LeZion', lat: 31.9640, lon: 34.8042 },
       { id: 'petah-tikva', name: 'Petah Tikva', lat: 32.0871, lon: 34.8875 },
       { id: 'eilat', name: 'Eilat', lat: 29.5577, lon: 34.9519 },
       { id: 'sderot', name: 'Sderot', lat: 31.5257, lon: 34.5969 },
+      { id: 'tiberias', name: 'Tiberias', lat: 32.7957, lon: 35.5310 },
+      { id: 'nahariya', name: 'Nahariya', lat: 33.0081, lon: 35.0981 },
     ];
 
     let recentSirenEvents = [];
     let dataSource = 'demo';
+    let lastDataFetchTime = null;
     let state = {
-      userCityId: 'tel-aviv',
+      userLocationId: 'center',
       userLat: 32.0853,
       userLon: 34.7818,
       useGeolocation: false,
-      lastSirenCityId: null,
       lastSirenLat: 32.0853,
       lastSirenLon: 34.7818,
       minutesSinceLastSiren: 120,
       recentAlertsCount: 0,
-      liveMode: true,
       previousProbability: 50,
       lastDisplayedProbability: 50,
     };
@@ -684,38 +682,71 @@
       return fetchOrefFromDataPath();
     }
 
+    // Support both API formats: (1) { data: string[] } or (2) array of { id, type, cities: string[] }
     function parseAlertsJson(json, fromHistory) {
       const alerts = [];
-      if (!json || !json.data || !Array.isArray(json.data)) return { alerts: [], fromHistory };
-      const ts = json.timestamp ? json.timestamp * 1000 : (json.id ? parseInt(json.id, 10) : Date.now());
-      for (const cityLabel of json.data) {
-        if (!cityLabel || String(cityLabel).indexOf('בדיקה') !== -1) continue;
-        const coords = resolveHebrewCityToCoords(cityLabel);
-        if (coords) {
-          alerts.push({
-            ts: ts,
-            city: coords.nameEn,
-            cityHebrew: coords.label,
-            lat: coords.lat,
-            lon: coords.lon,
-            id: json.id,
-            type: json.cat || '1',
-          });
+      const now = Date.now();
+      if (!json) return { alerts: [], fromHistory };
+
+      if (Array.isArray(json)) {
+        for (const item of json) {
+          const cities = item.cities || (item.data ? (Array.isArray(item.data) ? item.data : [item.data]) : []);
+          const ts = item.timestamp ? item.timestamp * 1000 : (item.id ? parseInt(String(item.id).slice(0, 13), 10) : now);
+          for (const cityLabel of cities) {
+            if (!cityLabel || String(cityLabel).indexOf('בדיקה') !== -1) continue;
+            const coords = resolveHebrewCityToCoords(cityLabel);
+            if (coords) {
+              alerts.push({
+                ts: ts,
+                city: coords.nameEn,
+                cityHebrew: coords.label,
+                lat: coords.lat,
+                lon: coords.lon,
+                id: item.id,
+                type: item.type || item.cat || '1',
+              });
+            }
+          }
+        }
+        return { alerts, fromHistory };
+      }
+
+      if (json.data && Array.isArray(json.data)) {
+        const ts = json.timestamp ? json.timestamp * 1000 : (json.id ? parseInt(String(json.id).slice(0, 13), 10) : now);
+        for (const cityLabel of json.data) {
+          if (!cityLabel || String(cityLabel).indexOf('בדיקה') !== -1) continue;
+          const coords = resolveHebrewCityToCoords(cityLabel);
+          if (coords) {
+            alerts.push({
+              ts: ts,
+              city: coords.nameEn,
+              cityHebrew: coords.label,
+              lat: coords.lat,
+              lon: coords.lon,
+              id: json.id,
+              type: json.cat || '1',
+            });
+          }
         }
       }
       return { alerts, fromHistory };
     }
+
+    // History: support alertDate or datetime; show alerts from last hour (workflow runs every 5 min)
+    const HISTORY_WINDOW_SEC = 3600;
 
     function parseAlertsHistoryJson(json) {
       const alerts = [];
       if (!Array.isArray(json)) return { alerts: [], fromHistory: true };
       const nowSec = Date.now() / 1000;
       for (const item of json) {
-        if (!item.data || !item.alertDate) continue;
-        const unix = new Date(item.alertDate).getTime() / 1000;
-        if (nowSec - unix > 120) continue;
-        if (String(item.data).indexOf('בדיקה') !== -1) continue;
-        const coords = resolveHebrewCityToCoords(item.data);
+        const cityStr = item.data || item.city;
+        if (!cityStr || String(cityStr).indexOf('בדיקה') !== -1) continue;
+        const dateStr = item.alertDate || item.datetime || (item.date && item.time ? item.date + 'T' + item.time : null);
+        if (!dateStr) continue;
+        const unix = new Date(dateStr).getTime() / 1000;
+        if (isNaN(unix) || nowSec - unix > HISTORY_WINDOW_SEC) continue;
+        const coords = resolveHebrewCityToCoords(cityStr);
         if (coords) {
           alerts.push({
             ts: unix * 1000,
@@ -723,8 +754,8 @@
             cityHebrew: coords.label,
             lat: coords.lat,
             lon: coords.lon,
-            id: item.alertDate,
-            type: item.category || '1',
+            id: dateStr,
+            type: item.category || item.type || '1',
           });
         }
       }
@@ -757,12 +788,10 @@
       if (latest) {
         state.lastSirenLat = latest.lat;
         state.lastSirenLon = latest.lon;
-        state.lastSirenCityId = null;
         state.minutesSinceLastSiren = (now - latest.ts) / (60 * 1000);
       }
       state.recentAlertsCount = recentSirenEvents.filter(e => e.ts >= oneHourAgo).length;
-      document.getElementById('inputMinutesSince').value = Math.round(state.minutesSinceLastSiren);
-      document.getElementById('inputRecentAlerts').value = state.recentAlertsCount;
+      lastDataFetchTime = Date.now();
       renderTimeline();
       updateUI();
     }
@@ -775,6 +804,7 @@
       let currentInterval = POLL_INTERVAL_WHEN_FAILING_MS;
       function poll() {
         fetchOrefAlerts().then(function (result) {
+          lastDataFetchTime = Date.now();
           if (result) {
             mergeApiAlertsIntoState(result);
             if (currentInterval !== POLL_INTERVAL_WHEN_LIVE_MS) {
@@ -782,6 +812,8 @@
               clearInterval(orefPollTimer);
               orefPollTimer = setInterval(poll, POLL_INTERVAL_WHEN_LIVE_MS);
             }
+          } else {
+            updateUI();
           }
         }).catch(function () {});
       }
@@ -805,8 +837,9 @@
         },
         function () {
           state.useGeolocation = false;
-          setLocationHint('Using city selection');
-          if (state.userCityId) document.getElementById('selectUserCity').value = state.userCityId;
+          setLocationHint('Choose a region or city above');
+          const sel = document.getElementById('selectUserLocation');
+          if (sel && state.userLocationId) sel.value = state.userLocationId;
           updateUI();
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
@@ -959,7 +992,8 @@
       document.getElementById('distanceVisualFill').style.width = `${100 - distPct}%`;
       document.getElementById('cardRecentCount').textContent = state.recentAlertsCount;
       document.getElementById('cardDataSource').textContent = dataSource === 'api' ? 'Live (Pikud HaOref)' : 'Demo data';
-      document.getElementById('cardUpdated').textContent = new Date().toLocaleTimeString();
+      const updatedEl = document.getElementById('cardUpdated');
+      updatedEl.textContent = lastDataFetchTime ? new Date(lastDataFetchTime).toLocaleTimeString() : '—';
 
       document.getElementById('factorsBreakdown').innerHTML = [
         `base: ${factors.base.toFixed(1)}%`,
@@ -982,135 +1016,40 @@
       document.getElementById('timeline').innerHTML = html || '<div class="timeline-item">No recent events</div>';
     }
 
-    function syncStateFromInputs() {
-      state.minutesSinceLastSiren = parseInt(document.getElementById('inputMinutesSince').value, 10) || 0;
-      state.recentAlertsCount = parseInt(document.getElementById('inputRecentAlerts').value, 10) || 0;
-      const userCity = CITIES.find(c => c.id === document.getElementById('selectUserCity').value);
-      const sirenCity = CITIES.find(c => c.id === document.getElementById('selectSirenCity').value);
-      if (userCity) {
-        state.userCityId = userCity.id;
-        state.userLat = userCity.lat;
-        state.userLon = userCity.lon;
+    function syncLocationFromSelect() {
+      const sel = document.getElementById('selectUserLocation');
+      const loc = LOCATIONS.find(l => l.id === (sel && sel.value));
+      if (loc) {
+        state.userLocationId = loc.id;
+        state.userLat = loc.lat;
+        state.userLon = loc.lon;
         state.useGeolocation = false;
         setLocationHint('');
-      }
-      if (sirenCity) {
-        state.lastSirenCityId = sirenCity.id;
-        state.lastSirenLat = sirenCity.lat;
-        state.lastSirenLon = sirenCity.lon;
+        updateUI();
       }
     }
 
-    function populateCities() {
-      const opts = CITIES.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-      document.getElementById('selectUserCity').innerHTML = opts;
-      document.getElementById('selectSirenCity').innerHTML = opts;
-      if (state.userCityId) document.getElementById('selectUserCity').value = state.userCityId;
-      if (state.lastSirenCityId) document.getElementById('selectSirenCity').value = state.lastSirenCityId;
-      else document.getElementById('selectSirenCity').value = CITIES[0].id;
-    }
-
-    function simulateNewSiren() {
-      const city = CITIES.find(c => c.id === document.getElementById('selectSirenCity').value) || CITIES[0];
-      recentSirenEvents.unshift({
-        ts: Date.now(),
-        cityId: city.id,
-        city: city.name,
-        lat: city.lat,
-        lon: city.lon,
-      });
-      recentSirenEvents = recentSirenEvents.slice(0, 20);
-      state.lastSirenLat = city.lat;
-      state.lastSirenLon = city.lon;
-      state.lastSirenCityId = city.id;
-      state.minutesSinceLastSiren = 0;
-      state.recentAlertsCount = Math.min(state.recentAlertsCount + 1, 20);
-      document.getElementById('inputMinutesSince').value = 0;
-      document.getElementById('inputRecentAlerts').value = state.recentAlertsCount;
-      document.getElementById('selectSirenCity').value = city.id;
-      renderTimeline();
-      updateUI();
-    }
-
-    function resetDefaults() {
-      state = {
-        userCityId: 'tel-aviv',
-        userLat: 32.0853,
-        userLon: 34.7818,
-        useGeolocation: false,
-        lastSirenCityId: 'tel-aviv',
-        lastSirenLat: 32.0853,
-        lastSirenLon: 34.7818,
-        minutesSinceLastSiren: 45,
-        recentAlertsCount: 2,
-        liveMode: state.liveMode,
-        previousProbability: 50,
-        lastDisplayedProbability: 50,
-      };
-      dataSource = 'demo';
-      recentSirenEvents = [
-        { ts: Date.now() - 45 * 60 * 1000, cityId: 'tel-aviv', city: 'Tel Aviv', lat: 32.0853, lon: 34.7818 },
-        { ts: Date.now() - 78 * 60 * 1000, cityId: 'rishon', city: 'Rishon LeZion', lat: 31.9640, lon: 34.8042 },
-        { ts: Date.now() - 120 * 60 * 1000, cityId: 'ashdod', city: 'Ashdod', lat: 31.8044, lon: 34.6553 },
-      ];
-      document.getElementById('inputMinutesSince').value = 45;
-      document.getElementById('inputRecentAlerts').value = 2;
-      document.getElementById('selectUserCity').value = 'tel-aviv';
-      document.getElementById('selectSirenCity').value = 'tel-aviv';
-      setLocationHint('');
-      renderTimeline();
-      updateUI();
-    }
-
-    let liveInterval = null;
-    function tickLive() {
-      state.minutesSinceLastSiren += 1 / 60;
-      document.getElementById('inputMinutesSince').value = Math.round(state.minutesSinceLastSiren);
-      syncStateFromInputs();
-      updateUI();
-    }
-
-    function setLiveMode(on) {
-      state.liveMode = on;
-      document.getElementById('toggleLive').classList.toggle('on', on);
-      if (on && !liveInterval) {
-        liveInterval = setInterval(tickLive, 1000);
-      } else if (!on && liveInterval) {
-        clearInterval(liveInterval);
-        liveInterval = null;
-      }
+    function populateLocations() {
+      const sel = document.getElementById('selectUserLocation');
+      if (!sel) return;
+      sel.innerHTML = LOCATIONS.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+      sel.value = state.userLocationId || LOCATIONS[0].id;
     }
 
     function init() {
-      populateCities();
+      populateLocations();
       if (recentSirenEvents.length === 0) {
-        recentSirenEvents = [
-          { ts: Date.now() - 45 * 60 * 1000, cityId: 'tel-aviv', city: 'Tel Aviv', lat: 32.0853, lon: 34.7818 },
-          { ts: Date.now() - 78 * 60 * 1000, cityId: 'rishon', city: 'Rishon LeZion', lat: 31.9640, lon: 34.8042 },
-          { ts: Date.now() - 120 * 60 * 1000, cityId: 'ashdod', city: 'Ashdod', lat: 31.8044, lon: 34.6553 },
-        ];
-        state.minutesSinceLastSiren = 45;
-        state.recentAlertsCount = 2;
-        state.lastSirenLat = 32.0853;
-        state.lastSirenLon = 34.7818;
-        state.lastSirenCityId = 'tel-aviv';
+        state.minutesSinceLastSiren = 120;
+        state.recentAlertsCount = 0;
       }
       renderTimeline();
       updateUI();
 
       requestUserLocation();
 
-      document.getElementById('selectUserCity').addEventListener('change', () => { syncStateFromInputs(); updateUI(); });
-      document.getElementById('selectSirenCity').addEventListener('change', () => { syncStateFromInputs(); updateUI(); });
-      document.getElementById('inputMinutesSince').addEventListener('change', () => { syncStateFromInputs(); updateUI(); });
-      document.getElementById('inputRecentAlerts').addEventListener('change', () => { syncStateFromInputs(); updateUI(); });
+      document.getElementById('selectUserLocation').addEventListener('change', syncLocationFromSelect);
+      document.getElementById('btnUseMyLocation').addEventListener('click', requestUserLocation);
 
-      document.getElementById('btnSimulateSiren').addEventListener('click', simulateNewSiren);
-      document.getElementById('btnReset').addEventListener('click', resetDefaults);
-
-      document.getElementById('toggleLive').addEventListener('click', () => setLiveMode(!state.liveMode));
-
-      setLiveMode(true);
       startOrefPolling();
     }
 
