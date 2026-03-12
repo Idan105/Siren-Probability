@@ -1,0 +1,1 @@
+{"probability":58.48,"timestamp":"2026-03-12T22:39:50.770Z","averageGap":153.73283605777394,"minutesUnderOver":152.45478605777393,"minutesSinceLastSiren":1.27805,"recentAlertsCount":7,"lastSirenLat":31.77,"lastSirenLon":34.99,"factors":{"base":2,"day":2.3180490888917538,"gap":49.79216378999219,"distance":11.190590431209452,"cluster":15},"history":[{"ts":1773355190770,"p":58.48}]}
