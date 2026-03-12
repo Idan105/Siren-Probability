@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * One-time script: fetch alerts history from Pikud HaOref's official history API
- * (see https://github.com/eladnava/pikud-haoref-api config: AlertsHistory.json),
- * filter to last 30 days, write data/history.json in dashboard format, then git add/commit/push.
+ * Fetch alerts history from Pikud HaOref's official history API and merge with
+ * existing data/history.json. The API only returns a short recent window (hours);
+ * by merging we keep up to 30 days across runs (same logic as the workflow).
+ * Writes data/history.json. You can commit and push yourself.
  *
  * Run from repo root: node scripts/fetch-last-month-history.js
  *
@@ -11,10 +12,8 @@
 
 const fs = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
 
-const REPO_ROOT = path.join(__dirname, "..");
-const DATA_DIR = path.join(REPO_ROOT, "data");
+const DATA_DIR = path.join(__dirname, "..", "data");
 const OREF_HISTORY_URL =
   "https://www.oref.org.il/warningMessages/alert/History/AlertsHistory.json";
 
@@ -86,65 +85,58 @@ function toHistoryItem(item) {
 }
 
 async function main() {
+  // Oref's API only returns a short recent window (hours/same day). Merge with existing
+  // data/history.json so we keep building up to 30 days across runs (same as the workflow).
+  let existing = [];
+  const historyPath = path.join(DATA_DIR, "history.json");
+  if (fs.existsSync(historyPath)) {
+    try {
+      const raw = fs.readFileSync(historyPath, "utf8").trim();
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        existing = Array.isArray(parsed) ? parsed : [];
+      }
+    } catch (_) {}
+  }
+  console.log("Existing history items:", existing.length);
+
   console.log("Fetching alerts history from Oref (AlertsHistory.json)...");
   const raw = await fetchOrefHistory();
   console.log("Raw items from API:", raw.length);
 
   const cutoff = Date.now() - THIRTY_DAYS_MS;
-  const filtered = raw.filter((item) => {
-    if (!item.alertDate || !item.data) return false;
-    if (String(item.data || "").indexOf("בדיקה") !== -1) return false;
-    const ts = new Date(item.alertDate).getTime();
-    return !isNaN(ts) && ts >= cutoff;
-  });
+  const fresh = raw
+    .filter((item) => {
+      if (!item.alertDate || !item.data) return false;
+      if (String(item.data || "").indexOf("בדיקה") !== -1) return false;
+      const ts = new Date(item.alertDate).getTime();
+      return !isNaN(ts) && ts >= cutoff;
+    })
+    .map(toHistoryItem);
 
-  const history = filtered.map(toHistoryItem).sort((a, b) => {
+  const seen = new Set();
+  const merged = [];
+  for (const item of [...existing, ...fresh]) {
+    const id = (item.alertDate || "") + "|" + (item.data || "");
+    if (seen.has(id)) continue;
+    const ts = new Date(item.alertDate).getTime();
+    if (isNaN(ts) || ts < cutoff) continue;
+    seen.add(id);
+    merged.push(item);
+  }
+  const history = merged.sort((a, b) => {
     const tA = new Date(a.alertDate).getTime();
     const tB = new Date(b.alertDate).getTime();
     return tA - tB;
   });
 
-  console.log("Last 30 days (after filter):", history.length);
+  console.log("Last 30 days (after merge):", history.length);
 
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
-  const historyPath = path.join(DATA_DIR, "history.json");
   fs.writeFileSync(historyPath, JSON.stringify(history, null, 0), "utf8");
   console.log("Wrote", historyPath);
-
-  execSync("git add data/history.json", { cwd: REPO_ROOT, stdio: "inherit" });
-  try {
-    execSync("git diff --staged --quiet", { cwd: REPO_ROOT, stdio: "pipe" });
-    console.log("No changes to commit.");
-    return;
-  } catch (_) {}
-  execSync(
-    'git commit -m "history: backfill last 30 days from Oref AlertsHistory API [skip ci]"',
-    { cwd: REPO_ROOT, stdio: "inherit" }
-  );
-
-  let stashed = false;
-  const status = execSync("git status --porcelain", {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-  });
-  if (status.trim()) {
-    execSync('git stash push -u -m "fetch-last-month-history"', {
-      cwd: REPO_ROOT,
-      stdio: "inherit",
-    });
-    stashed = true;
-  }
-  try {
-    execSync("git pull --rebase origin main", { cwd: REPO_ROOT, stdio: "pipe" });
-    execSync("git push origin main", { cwd: REPO_ROOT, stdio: "inherit" });
-    console.log("Pushed to origin main.");
-  } finally {
-    if (stashed) {
-      execSync("git stash pop", { cwd: REPO_ROOT, stdio: "inherit" });
-    }
-  }
 }
 
 main().catch((err) => {
