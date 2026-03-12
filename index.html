@@ -732,8 +732,8 @@
       return { alerts, fromHistory };
     }
 
-    // History: support alertDate or datetime; show alerts from last hour (workflow runs every 5 min)
-    const HISTORY_WINDOW_SEC = 3600;
+    // History: support alertDate or datetime; use all alerts from last 30 days for calc
+    const HISTORY_WINDOW_SEC = 30 * 24 * 3600;
 
     function parseAlertsHistoryJson(json) {
       const alerts = [];
@@ -782,7 +782,7 @@
           }
         }
       }
-      recentSirenEvents = recentSirenEvents.filter(e => e.ts > oneHourAgo - 60000).slice(0, 50);
+      recentSirenEvents = recentSirenEvents.filter(e => e.ts > now - HISTORY_WINDOW_SEC * 1000).slice(0, 200);
       const sorted = [...recentSirenEvents].sort((x, y) => y.ts - x.ts);
       const latest = sorted[0];
       if (latest) {

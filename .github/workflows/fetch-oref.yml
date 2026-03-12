@@ -31,16 +31,22 @@ jobs:
               'User-Agent': 'Mozilla/5.0 (compatible; oref-fetch/1)'
             }
           };
+          const HISTORY_DAYS = 30;
+          const HISTORY_WINDOW_MS = HISTORY_DAYS * 24 * 60 * 60 * 1000;
+          function decodeBody(buf) {
+            const bytes = new Uint8Array(buf);
+            if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE)
+              return new TextDecoder('utf-16le').decode(buf.slice(2));
+            return new TextDecoder('utf-8').decode(buf);
+          }
           const t = Math.floor(Date.now()/1000);
           (async () => {
             try {
               let r = await fetch('https://www.oref.org.il/WarningMessages/alert/Alerts.json?t='+t, opts);
               console.log('Alerts.json status:', r.status, r.statusText);
               let b = await r.arrayBuffer();
-              let s = new TextDecoder('utf-8').decode(b);
-              if (b.byteLength>=2 && (new Uint8Array(b)[0]===0xFF && new Uint8Array(b)[1]===0xFE))
-                s = new TextDecoder('utf-16le').decode(b.slice(2));
-              const alerts = s.trim() ? JSON.parse(s) : {};
+              const s = decodeBody(b).trim();
+              const alerts = s ? JSON.parse(s) : {};
               fs.writeFileSync('data/alerts.json', JSON.stringify(alerts), 'utf8');
               console.log('Alerts: got', typeof alerts === 'object' && alerts.data ? alerts.data.length : (Array.isArray(alerts) ? alerts.length : 0), 'items');
             } catch(e) {
@@ -48,18 +54,37 @@ jobs:
               fs.writeFileSync('data/alerts.json', '{}', 'utf8');
             }
             try {
+              let existing = [];
+              if (fs.existsSync('data/history.json')) {
+                try {
+                  const raw = fs.readFileSync('data/history.json', 'utf8').trim();
+                  if (raw) existing = JSON.parse(raw);
+                  if (!Array.isArray(existing)) existing = [];
+                } catch(_) {}
+              }
               let r = await fetch('https://www.oref.org.il/WarningMessages/alert/History/AlertsHistory.json?t='+t, opts);
               console.log('History status:', r.status, r.statusText);
               let b = await r.arrayBuffer();
-              let s = new TextDecoder('utf-8').decode(b);
-              if (b.byteLength>=2 && (new Uint8Array(b)[0]===0xFF && new Uint8Array(b)[1]===0xFE))
-                s = new TextDecoder('utf-16le').decode(b.slice(2));
-              const history = s.trim() ? JSON.parse(s) : [];
-              fs.writeFileSync('data/history.json', JSON.stringify(history), 'utf8');
-              console.log('History: got', Array.isArray(history) ? history.length : 0, 'items');
+              const s = decodeBody(b).trim();
+              const fresh = s ? JSON.parse(s) : [];
+              const arr = Array.isArray(fresh) ? fresh : [];
+              const seen = new Set();
+              const cutoff = Date.now() - HISTORY_WINDOW_MS;
+              const merged = [];
+              for (const item of [...existing, ...arr]) {
+                const id = (item.alertDate || item.datetime || item.date || '') + '|' + (item.data || item.city || '');
+                if (seen.has(id)) continue;
+                const ts = (item.alertDate || item.datetime) ? new Date(item.alertDate || item.datetime).getTime() : 0;
+                if (ts && ts < cutoff) continue;
+                seen.add(id);
+                merged.push(item);
+              }
+              merged.sort((a,b) => new Date(b.alertDate || b.datetime || 0).getTime() - new Date(a.alertDate || a.datetime || 0).getTime());
+              fs.writeFileSync('data/history.json', JSON.stringify(merged), 'utf8');
+              console.log('History: merged', merged.length, 'items (last', HISTORY_DAYS, 'days)');
             } catch(e) {
               console.log('History fetch error:', e.message);
-              fs.writeFileSync('data/history.json', '[]', 'utf8');
+              if (!fs.existsSync('data/history.json')) fs.writeFileSync('data/history.json', '[]', 'utf8');
             }
           })();
           "
