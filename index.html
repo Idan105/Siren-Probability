@@ -422,6 +422,58 @@
       transition: width 0.4s ease;
     }
 
+    /* Probability history line chart (when using local server) */
+    .probability-graph-section {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .probability-graph-section h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: var(--text-primary);
+    }
+    .probability-graph {
+      width: 100%;
+      height: 120px;
+      border-radius: 8px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+    }
+    .probability-graph svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .probability-graph-line {
+      fill: none;
+      stroke: var(--accent-cyan);
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: stroke 0.3s ease;
+    }
+    .probability-graph-dot {
+      fill: var(--bg-panel);
+      stroke: var(--accent-cyan);
+      stroke-width: 2;
+      transition: fill 0.3s ease, stroke 0.3s ease;
+    }
+    .probability-graph-dot.high { stroke: var(--accent-amber); }
+    .probability-graph-dot.very { stroke: var(--accent-red); }
+    .probability-graph-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.35rem;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
     footer {
       text-align: center;
       padding: 1rem;
@@ -482,6 +534,12 @@
       }
       .card {
         padding: 0.75rem;
+      }
+      .probability-graph-section {
+        padding: 1rem;
+      }
+      .probability-graph {
+        height: 100px;
       }
       .card-label {
         font-size: 0.7rem;
@@ -597,6 +655,15 @@
       </div>
     </div>
 
+    <section class="probability-graph-section" id="probabilityGraphSection" style="display: none;">
+      <h3>Probability history</h3>
+      <div class="probability-graph" id="probabilityGraph" aria-hidden="true"></div>
+      <div class="probability-graph-labels">
+        <span id="graphLabelLeft">Earlier</span>
+        <span id="graphLabelRight">Now</span>
+      </div>
+    </section>
+
     <section class="controls">
       <h3>Your location</h3>
       <p class="controls-desc">Used to estimate distance from recent alerts. Choose a region or city, or use your device location.</p>
@@ -624,14 +691,14 @@
     </section>
 
     <footer>
-      Data from Pikud HaOref, updated by GitHub Actions every 5 minutes. When you see &quot;Demo data&quot;, the workflow may not have run yet or data is empty. Not an official alert system.
+      Data from Pikud HaOref. With the <strong>local server</strong> (run <code>node server.js</code> in <code>local-pusher/</code>), probability is computed on your PC and the chart shows history. Otherwise the dashboard uses GitHub-hosted data or demo data. Not an official alert system.
     </footer>
   </div>
 
   <script>
-    // ========== PIKUD HAOREF (Home Front Command) DATA ==========
-    // GitHub Actions (.github/workflows/fetch-oref.yml) fetches from oref and writes data/alerts.json, data/history.json.
-    // Dashboard reads same-origin from this path — no CORS, no request limit on GitHub Pages.
+    // ========== UI DATA (from local server) ==========
+    // Local server (local-pusher) fetches Oref, computes probability, and overwrites data/ui-data.json.
+    // Dashboard only reads data/ui-data.json (single source). No alerts.json or history.json for UI.
     const OREF_JSON_DATA_PATH = 'data';
 
     // Hebrew city names (from Pikud HaOref API) → coordinates for distance calc.
@@ -707,6 +774,10 @@
     let dataSource = 'demo';
     let lastDataFetchTime = null;
     let lastDisplayed = {};
+    let serverUiData = null;       // full ui-data.json: probability, factors, history (max 100), etc.
+    let useServerProbability = false;
+    let serverProbabilityPollTimer = null;
+    const SERVER_PROBABILITY_POLL_MS = 5000;
     let state = {
       userLocationId: 'center',
       userLat: 32.0853,
@@ -720,26 +791,19 @@
       lastDisplayedProbability: 50,
     };
 
-    async function fetchOrefFromDataPath() {
+    async function fetchUiData() {
       const base = OREF_JSON_DATA_PATH.replace(/\/$/, '');
       try {
-        const res = await fetch(base + '/alerts.json', { method: 'GET', cache: 'no-store' });
-        if (!res.ok) throw new Error(res.status);
-        const json = await res.json();
-        const out = parseAlertsJson(json, false);
-        if (out.alerts && out.alerts.length > 0) return out;
-        const resH = await fetch(base + '/history.json', { method: 'GET', cache: 'no-store' });
-        if (!resH.ok) throw new Error(resH.status);
-        const jsonH = await resH.json();
-        return parseAlertsHistoryJson(Array.isArray(jsonH) ? jsonH : []);
+        const res = await fetch(base + '/ui-data.json', { method: 'GET', cache: 'no-store' });
+        if (!res.ok) return false;
+        const data = await res.json();
+        if (!data || data.timestamp == null) return false;
+        serverUiData = data;
+        useServerProbability = true;
+        return true;
       } catch (e) {
-        return null;
+        return false;
       }
-    }
-
-    async function fetchOrefAlerts() {
-      if (!OREF_JSON_DATA_PATH) return null;
-      return fetchOrefFromDataPath();
     }
 
     // Support both API formats: (1) { data: string[] } or (2) array of { id, type, cities: string[] }
@@ -1055,8 +1119,77 @@
       if (el) el.textContent = str;
     }
 
+    function renderProbabilityGraph() {
+      const el = document.getElementById('probabilityGraph');
+      if (!el) return;
+      const pts = (serverUiData && Array.isArray(serverUiData.history)) ? serverUiData.history : [];
+      if (pts.length < 1) {
+        el.innerHTML = '<p style="margin:0;padding:1rem;color:var(--text-muted);font-size:0.85rem;">Collecting data…</p>';
+        return;
+      }
+      const vbW = 300;
+      const vbH = 120;
+      const pad = { top: 12, right: 12, bottom: 12, left: 12 };
+      const xMin = Math.min(...pts.map((p) => p.ts));
+      const xMax = Math.max(...pts.map((p) => p.ts));
+      const xRange = xMax - xMin || 1;
+      const gw = vbW - pad.left - pad.right;
+      const gh = vbH - pad.top - pad.bottom;
+      const x = (ts) => pad.left + ((ts - xMin) / xRange) * gw;
+      const y = (p) => pad.top + gh - (p / 100) * gh;
+      const lastP = pts[pts.length - 1];
+      const lineColor = lastP.p >= 60 ? 'var(--accent-red)' : lastP.p >= 35 ? 'var(--accent-amber)' : 'var(--accent-cyan)';
+      const pathD =
+        pts.length >= 2
+          ? pts.map((p, i) => (i === 0 ? 'M' : 'L') + x(p.ts).toFixed(2) + ',' + y(p.p).toFixed(2)).join(' ')
+          : 'M' + pad.left + ',' + y(lastP.p).toFixed(2) + ' L' + (pad.left + gw).toFixed(2) + ',' + y(lastP.p).toFixed(2);
+      let svg =
+        '<svg viewBox="0 0 ' +
+        vbW +
+        ' ' +
+        vbH +
+        '" preserveAspectRatio="xMidYMid meet"><path class="probability-graph-line" d="' +
+        pathD +
+        '" style="stroke:' +
+        lineColor +
+        '"/>';
+      pts.forEach(function (p) {
+        const dotClass = p.p >= 60 ? 'probability-graph-dot very' : p.p >= 35 ? 'probability-graph-dot high' : 'probability-graph-dot';
+        svg += '<circle class="' + dotClass + '" cx="' + x(p.ts).toFixed(2) + '" cy="' + y(p.p).toFixed(2) + '" r="5"/>';
+      });
+      svg += '</svg>';
+      el.innerHTML = svg;
+    }
+
     function updateUI(skipWhenUnchanged) {
-      const { probability, factors } = getSmoothedProbability();
+      let probability, factors, averageGap, minutesUnderOver, minutesSinceLastSiren, recentAlertsCount, lastSirenLat, lastSirenLon;
+      if (useServerProbability && serverUiData) {
+        probability = serverUiData.probability;
+        factors = serverUiData.factors || {};
+        averageGap = serverUiData.averageGap;
+        minutesUnderOver = serverUiData.minutesUnderOver;
+        minutesSinceLastSiren = serverUiData.minutesSinceLastSiren;
+        recentAlertsCount = serverUiData.recentAlertsCount;
+        lastSirenLat = serverUiData.lastSirenLat;
+        lastSirenLon = serverUiData.lastSirenLon;
+        state.lastDisplayedProbability = probability;
+        const section = document.getElementById('probabilityGraphSection');
+        if (section) section.style.display = '';
+        renderProbabilityGraph();
+      } else {
+        const out = getSmoothedProbability();
+        probability = out.probability;
+        factors = out.factors;
+        const gapStats = getHistoricalGapStats();
+        averageGap = gapStats.averageGap;
+        minutesUnderOver = gapStats.minutesUnderOver;
+        minutesSinceLastSiren = state.minutesSinceLastSiren;
+        recentAlertsCount = state.recentAlertsCount;
+        lastSirenLat = state.lastSirenLat;
+        lastSirenLon = state.lastSirenLon;
+        const section = document.getElementById('probabilityGraphSection');
+        if (section) section.style.display = 'none';
+      }
       const displayP = Math.round(probability * 10) / 10;
 
       const gaugeDeg = (displayP / 100) * 360;
@@ -1084,8 +1217,7 @@
       const driverText = getMainDriver(factors);
       setIfChanged('driverText', driverText, String);
       const gapEl = document.getElementById('gapText');
-      if (gapEl) {
-        const { averageGap, minutesUnderOver } = getHistoricalGapStats();
+      if (gapEl && averageGap != null && minutesUnderOver != null) {
         const gapStr = 'Avg gap (history): ' + averageGap.toFixed(0) + ' min · ' + (minutesUnderOver > 0 ? minutesUnderOver.toFixed(0) + ' min under' : Math.abs(minutesUnderOver).toFixed(0) + ' min over') + ' average';
         if (!skipWhenUnchanged || lastDisplayed.gapText !== gapStr) {
           lastDisplayed.gapText = gapStr;
@@ -1093,16 +1225,16 @@
         }
       }
 
-      const timeSinceStr = state.minutesSinceLastSiren < 60 ? `${state.minutesSinceLastSiren} min ago` : `${(state.minutesSinceLastSiren / 60).toFixed(1)} h ago`;
+      const timeSinceStr = (minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren) < 60 ? `${(minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren)} min ago` : `${((minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren) / 60).toFixed(1)} h ago`;
       setIfChanged('cardTimeSince', timeSinceStr, String);
-      const distKm = haversineKm(state.userLat, state.userLon, state.lastSirenLat, state.lastSirenLon);
+      const distKm = haversineKm(state.userLat, state.userLon, lastSirenLat != null ? lastSirenLat : state.lastSirenLat, lastSirenLon != null ? lastSirenLon : state.lastSirenLon);
       setIfChanged('cardDistance', distKm.toFixed(1) + ' km', String);
       const distPct = Math.min(100, (distKm / 100) * 100);
       document.getElementById('distanceVisualFill').style.width = `${100 - distPct}%`;
-      setIfChanged('cardRecentCount', state.recentAlertsCount, String);
-      const dataSourceStr = dataSource === 'api' ? 'Live (Pikud HaOref)' : 'Demo data';
+      setIfChanged('cardRecentCount', recentAlertsCount != null ? recentAlertsCount : state.recentAlertsCount, String);
+      const dataSourceStr = useServerProbability ? 'Local server' : (dataSource === 'api' ? 'Live (Pikud HaOref)' : 'Start the local server');
       setIfChanged('cardDataSource', dataSourceStr, String);
-      const updatedStr = lastDataFetchTime ? new Date(lastDataFetchTime).toLocaleTimeString() : '—';
+      const updatedStr = useServerProbability && serverUiData && serverUiData.timestamp ? new Date(serverUiData.timestamp).toLocaleTimeString() : (lastDataFetchTime ? new Date(lastDataFetchTime).toLocaleTimeString() : '—');
       setIfChanged('cardUpdated', updatedStr, String);
 
       const factorsStr = [
@@ -1140,20 +1272,31 @@
       sel.value = state.userLocationId || LOCATIONS[0].id;
     }
 
-    function init() {
+    async function init() {
       populateLocations();
-      if (recentSirenEvents.length === 0) {
-        state.minutesSinceLastSiren = 120;
-        state.recentAlertsCount = 0;
-      }
-      updateUI();
-
       requestUserLocation();
-
       document.getElementById('selectUserLocation').addEventListener('change', syncLocationFromSelect);
       document.getElementById('btnUseMyLocation').addEventListener('click', requestUserLocation);
 
-      startOrefPolling();
+      const hasServer = await fetchUiData();
+      if (hasServer) {
+        updateUI();
+        serverProbabilityPollTimer = setInterval(async () => {
+          await fetchUiData();
+          updateUI();
+        }, SERVER_PROBABILITY_POLL_MS);
+      } else {
+        dataSource = 'demo';
+        state.minutesSinceLastSiren = 120;
+        state.recentAlertsCount = 0;
+        updateUI();
+        // No alerts.json/history.json for UI — only ui-data.json from local server. Poll so we pick up when server starts.
+        serverProbabilityPollTimer = setInterval(async () => {
+          if (await fetchUiData()) {
+            updateUI();
+          }
+        }, SERVER_PROBABILITY_POLL_MS);
+      }
     }
 
     init();
