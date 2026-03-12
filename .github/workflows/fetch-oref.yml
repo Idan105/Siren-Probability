@@ -5,7 +5,7 @@ name: Fetch oref alerts
 
 on:
   schedule:
-    - cron: '*/5 * * * *'   # every 5 minutes
+    - cron: '* * * * *'     # every 1 minute (minimum for GitHub Actions)
   workflow_dispatch:        # run manually from Actions tab
 
 jobs:
