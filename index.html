@@ -664,19 +664,8 @@
 
     <div class="cards">
       <div class="card">
-        <div class="card-label">Time since last siren</div>
+        <div class="card-label">Time since last siren (region)</div>
         <div class="card-value" id="cardTimeSince">—</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Distance from last siren</div>
-        <div class="card-value" id="cardDistance">—</div>
-        <div class="distance-visual">
-          <div class="distance-visual-fill" id="distanceVisualFill" style="width: 0%"></div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-label">Recent alerts (60 min)</div>
-        <div class="card-value" id="cardRecentCount">—</div>
       </div>
       <div class="card">
         <div class="card-label">Data source</div>
@@ -1111,10 +1100,8 @@
 
     function getMainDriver(factors) {
       const arr = [
-        { name: 'Time-based escalation', v: factors.day },
-        { name: 'Below typical gap (historical)', v: factors.gap },
-        { name: 'Distance from last siren', v: factors.distance },
-        { name: 'Recent alert cluster', v: factors.cluster },
+        { name: 'Time of day (region pattern)', v: factors.day != null ? factors.day : 0 },
+        { name: 'Time since last alarm (region)', v: factors.gap != null ? factors.gap : 0 },
       ];
       arr.sort((a, b) => b.v - a.v);
       return arr[0].v > 1 ? arr[0].name : 'Base risk level';
@@ -1192,7 +1179,7 @@
     }
 
     function updateUI(skipWhenUnchanged) {
-      let probability, factors, averageGap, minutesUnderOver, minutesSinceLastSiren, recentAlertsCount, lastSirenLat, lastSirenLon, regionHistory;
+      let probability, factors, averageGap, minutesUnderOver, minutesSinceLastSiren, regionHistory;
       const regionData = useServerProbability ? getSelectedRegionData() : null;
       if (regionData) {
         probability = regionData.probability;
@@ -1200,9 +1187,6 @@
         averageGap = regionData.averageGap;
         minutesUnderOver = regionData.minutesUnderOver;
         minutesSinceLastSiren = regionData.minutesSinceLastSiren;
-        recentAlertsCount = regionData.recentAlertsCount;
-        lastSirenLat = regionData.lastSirenLat;
-        lastSirenLon = regionData.lastSirenLon;
         regionHistory = Array.isArray(regionData.history) ? regionData.history : [];
         state.lastDisplayedProbability = probability;
         const section = document.getElementById('probabilityGraphSection');
@@ -1212,14 +1196,11 @@
       } else {
         const out = getSmoothedProbability();
         probability = out.probability;
-        factors = out.factors;
+        factors = out.factors || {};
         const gapStats = getHistoricalGapStats();
         averageGap = gapStats.averageGap;
         minutesUnderOver = gapStats.minutesUnderOver;
         minutesSinceLastSiren = state.minutesSinceLastSiren;
-        recentAlertsCount = state.recentAlertsCount;
-        lastSirenLat = state.lastSirenLat;
-        lastSirenLon = state.lastSirenLon;
         const section = document.getElementById('probabilityGraphSection');
         if (section) section.style.display = 'none';
         const breakdownSection = document.getElementById('breakdownSection');
@@ -1262,11 +1243,6 @@
 
       const timeSinceStr = (minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren) < 60 ? `${(minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren)} min ago` : `${((minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren) / 60).toFixed(1)} h ago`;
       setIfChanged('cardTimeSince', timeSinceStr, String);
-      const distKm = regionData && regionData.distanceKm != null ? regionData.distanceKm : haversineKm(state.userLat, state.userLon, lastSirenLat != null ? lastSirenLat : state.lastSirenLat, lastSirenLon != null ? lastSirenLon : state.lastSirenLon);
-      setIfChanged('cardDistance', distKm.toFixed(1) + ' km', String);
-      const distPct = Math.min(100, (distKm / 100) * 100);
-      document.getElementById('distanceVisualFill').style.width = `${100 - distPct}%`;
-      setIfChanged('cardRecentCount', recentAlertsCount != null ? recentAlertsCount : state.recentAlertsCount, String);
       const dataSourceStr = useServerProbability ? 'Local server' : (dataSource === 'api' ? 'Live (Pikud HaOref)' : 'Start the local server');
       setIfChanged('cardDataSource', dataSourceStr, String);
       const updatedStr = useServerProbability && serverUiData && serverUiData.timestamp ? new Date(serverUiData.timestamp).toLocaleTimeString() : (lastDataFetchTime ? new Date(lastDataFetchTime).toLocaleTimeString() : '—');
