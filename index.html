@@ -317,12 +317,87 @@
       border-color: var(--accent-cyan);
       box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.25);
     }
-    .control-group select option {
-      background: var(--bg-deep);
-      color: var(--text-primary);
-      padding: 0.5rem 0.75rem;
-    }
     .control-group input[type="number"] { width: 100%; }
+
+    /* Custom region dropdown (dark list, no native select glitches) */
+    .region-select {
+      position: relative;
+      width: 100%;
+    }
+    .region-select-trigger {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 0.75rem;
+      min-height: 40px;
+      background: var(--bg-panel);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      text-align: left;
+    }
+    .region-select-trigger:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+    .region-select.open .region-select-trigger {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.25);
+    }
+    .region-select-trigger::after {
+      content: '';
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      margin-left: 0.5rem;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b95a8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat center;
+      transition: transform 0.2s ease;
+    }
+    .region-select.open .region-select-trigger::after {
+      transform: rotate(180deg);
+    }
+    .region-select-panel {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: var(--bg-panel);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      max-height: 260px;
+      overflow-y: auto;
+      display: none;
+    }
+    .region-select.open .region-select-panel {
+      display: block;
+    }
+    .region-select-option {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .region-select-option:hover,
+    .region-select-option:focus {
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .region-select-option.selected {
+      background: rgba(0, 212, 170, 0.15);
+      color: var(--accent-cyan);
+    }
     .location-hint {
       font-size: 0.75rem;
       color: var(--accent-cyan);
@@ -618,9 +693,9 @@
         font-size: 16px;
         padding: 0.6rem 0.75rem;
       }
-      .control-group select {
-        padding-right: 2.25rem;
-        background-position: right 0.6rem center;
+      .region-select-trigger {
+        min-height: 44px;
+        font-size: 16px;
       }
       .btn {
         min-height: 44px;
@@ -721,7 +796,12 @@
       <div class="controls-grid">
         <div class="control-group">
           <label>Area</label>
-          <select id="selectUserLocation"></select>
+          <div class="region-select" id="regionSelect">
+            <button type="button" class="region-select-trigger" id="regionSelectTrigger" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="regionSelectLabel">
+              <span id="regionSelectLabel">—</span>
+            </button>
+            <div class="region-select-panel" id="regionSelectPanel" role="listbox" aria-label="Region"></div>
+          </div>
         </div>
       </div>
     </section>
@@ -1009,9 +1089,7 @@
         function () {
           state.useGeolocation = false;
           setLocationHint('Choose a region or city above');
-          const sel = document.getElementById('selectUserLocation');
-          if (sel && state.userLocationId) sel.value = state.userLocationId;
-          updateUI();
+          if (state.userLocationId) setRegionFromId(state.userLocationId);
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
       );
@@ -1280,20 +1358,60 @@
       document.getElementById('ambientBg').style.opacity = 0.3 + (displayP / 100) * 0.2;
     }
 
-    function syncLocationFromSelect() {
-      const sel = document.getElementById('selectUserLocation');
-      const id = sel && sel.value;
-      if (id && REGIONS.some(r => r.id === id)) {
-        state.userLocationId = id;
-        updateUI(); // update immediately on select (no delay)
+    function setRegionFromId(id) {
+      if (!id || !REGIONS.some(r => r.id === id)) return;
+      state.userLocationId = id;
+      const labelEl = document.getElementById('regionSelectLabel');
+      const panel = document.getElementById('regionSelectPanel');
+      const region = REGIONS.find(r => r.id === id);
+      if (labelEl && region) labelEl.textContent = region.name;
+      if (panel) {
+        panel.querySelectorAll('.region-select-option').forEach((opt) => {
+          opt.classList.toggle('selected', opt.getAttribute('data-id') === id);
+          opt.setAttribute('aria-selected', opt.getAttribute('data-id') === id ? 'true' : 'false');
+        });
       }
+      updateUI();
     }
 
     function populateLocations() {
-      const sel = document.getElementById('selectUserLocation');
-      if (!sel) return;
-      sel.innerHTML = REGIONS.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
-      sel.value = state.userLocationId || REGIONS[0].id;
+      const trigger = document.getElementById('regionSelectTrigger');
+      const panel = document.getElementById('regionSelectPanel');
+      if (!trigger || !panel) return;
+      const id = state.userLocationId || REGIONS[0].id;
+      const region = REGIONS.find(r => r.id === id);
+      if (region) {
+        const labelEl = document.getElementById('regionSelectLabel');
+        if (labelEl) labelEl.textContent = region.name;
+      }
+      panel.innerHTML = REGIONS.map((r) => {
+        const selected = r.id === id;
+        return `<button type="button" class="region-select-option ${selected ? 'selected' : ''}" role="option" data-id="${r.id}" aria-selected="${selected}">${r.name}</button>`;
+      }).join('');
+      panel.querySelectorAll('.region-select-option').forEach((opt) => {
+        opt.addEventListener('click', () => {
+          const chosenId = opt.getAttribute('data-id');
+          setRegionFromId(chosenId);
+          document.getElementById('regionSelect').classList.remove('open');
+          trigger.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+
+    function setupRegionDropdown() {
+      const wrapper = document.getElementById('regionSelect');
+      const trigger = document.getElementById('regionSelectTrigger');
+      const panel = document.getElementById('regionSelectPanel');
+      if (!wrapper || !trigger || !panel) return;
+      trigger.addEventListener('click', () => {
+        const open = wrapper.classList.toggle('open');
+        trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      document.addEventListener('click', (e) => {
+        if (wrapper.contains(e.target)) return;
+        wrapper.classList.remove('open');
+        trigger.setAttribute('aria-expanded', 'false');
+      });
     }
 
     function renderBreakdownList(breakdown) {
@@ -1315,7 +1433,7 @@
 
     async function init() {
       populateLocations();
-      document.getElementById('selectUserLocation').addEventListener('change', syncLocationFromSelect);
+      setupRegionDropdown();
 
       const hasServer = await fetchUiData();
       if (hasServer) {
