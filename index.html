@@ -297,6 +297,31 @@
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.9rem;
     }
+    /* Region select: dark-theme native select with custom arrow and immediate feel */
+    .control-group select {
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+      padding-right: 2.25rem;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b95a8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.6rem center;
+      background-color: var(--bg-panel);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .control-group select:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+    .control-group select:focus {
+      outline: none;
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.25);
+    }
+    .control-group select option {
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      padding: 0.5rem 0.75rem;
+    }
     .control-group input[type="number"] { width: 100%; }
     .location-hint {
       font-size: 0.75rem;
@@ -592,6 +617,10 @@
         min-height: 44px;
         font-size: 16px;
         padding: 0.6rem 0.75rem;
+      }
+      .control-group select {
+        padding-right: 2.25rem;
+        background-position: right 0.6rem center;
       }
       .btn {
         min-height: 44px;
@@ -1256,7 +1285,7 @@
       const id = sel && sel.value;
       if (id && REGIONS.some(r => r.id === id)) {
         state.userLocationId = id;
-        updateUI();
+        updateUI(); // update immediately on select (no delay)
       }
     }
 
