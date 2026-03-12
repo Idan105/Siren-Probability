@@ -466,6 +466,62 @@
       transition: width 0.4s ease;
     }
 
+    /* Probability history graph (last hour, point every 10 min) */
+    .probability-graph-section {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .probability-graph-section h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: var(--text-primary);
+    }
+    .probability-graph {
+      width: 100%;
+      height: 120px;
+      border-radius: 8px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+    }
+    .probability-graph svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .probability-graph-line {
+      fill: none;
+      stroke: var(--accent-cyan);
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: stroke 0.3s ease;
+    }
+    .probability-graph-dot {
+      fill: var(--bg-panel);
+      stroke: var(--accent-cyan);
+      stroke-width: 2;
+      transition: fill 0.3s ease, stroke 0.3s ease;
+    }
+    .probability-graph-dot.high {
+      stroke: var(--accent-amber);
+    }
+    .probability-graph-dot.very {
+      stroke: var(--accent-red);
+    }
+    .probability-graph-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.35rem;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
     footer {
       text-align: center;
       padding: 1rem;
@@ -532,6 +588,12 @@
       }
       .card-value {
         font-size: 0.9rem;
+      }
+      .probability-graph-section {
+        padding: 1rem;
+      }
+      .probability-graph {
+        height: 100px;
       }
       .controls {
         padding: 1rem;
@@ -652,6 +714,15 @@
       </div>
     </div>
 
+    <section class="probability-graph-section">
+      <h3>Probability (last hour)</h3>
+      <div class="probability-graph" id="probabilityGraph" aria-hidden="true"></div>
+      <div class="probability-graph-labels">
+        <span id="graphLabelLeft">60 min ago</span>
+        <span id="graphLabelRight">Now</span>
+      </div>
+    </section>
+
     <section class="controls">
       <h3>Your location</h3>
       <p class="controls-desc">Used to estimate distance from recent alerts. Choose a region or city, or use your device location.</p>
@@ -768,6 +839,9 @@
     let recentSirenEvents = [];
     let dataSource = 'demo';
     let lastDataFetchTime = null;
+    const PROB_HISTORY_INTERVAL_MS = 10 * 60 * 1000;
+    const PROB_HISTORY_WINDOW_MS = 60 * 60 * 1000;
+    let probabilityHistory = [];
     let state = {
       userLocationId: 'center',
       userLat: 32.0853,
@@ -1125,6 +1199,43 @@
       ].map(s => `<div>${s}</div>`).join('');
 
       document.getElementById('ambientBg').style.opacity = 0.3 + (displayP / 100) * 0.2;
+
+      const now = Date.now();
+      const last = probabilityHistory[probabilityHistory.length - 1];
+      if (!last || now - last.ts >= PROB_HISTORY_INTERVAL_MS) {
+        probabilityHistory.push({ ts: now, p: displayP });
+        probabilityHistory = probabilityHistory.filter(e => e.ts >= now - PROB_HISTORY_WINDOW_MS).slice(-6);
+      }
+      renderProbabilityGraph();
+    }
+
+    function renderProbabilityGraph() {
+      const el = document.getElementById('probabilityGraph');
+      if (!el) return;
+      const pts = probabilityHistory;
+      if (pts.length < 2) {
+        el.innerHTML = '<p style="margin:0;padding:1rem;color:var(--text-muted);font-size:0.85rem;">Collecting data… (one point every 10 min)</p>';
+        return;
+      }
+      const vbW = 300;
+      const vbH = 120;
+      const pad = { top: 12, right: 12, bottom: 12, left: 12 };
+      const xMin = Math.min(...pts.map(p => p.ts));
+      const xMax = Math.max(...pts.map(p => p.ts));
+      const xRange = xMax - xMin || 1;
+      const gw = vbW - pad.left - pad.right;
+      const gh = vbH - pad.top - pad.bottom;
+      const x = (ts) => pad.left + ((ts - xMin) / xRange) * gw;
+      const y = (p) => pad.top + gh - (p / 100) * gh;
+      const pathD = pts.map((p, i) => (i === 0 ? 'M' : 'L') + x(p.ts).toFixed(2) + ',' + y(p.p).toFixed(2)).join(' ');
+      const lineColor = pts[pts.length - 1].p >= 60 ? 'var(--accent-red)' : pts[pts.length - 1].p >= 35 ? 'var(--accent-amber)' : 'var(--accent-cyan)';
+      let svg = '<svg viewBox="0 0 ' + vbW + ' ' + vbH + '" preserveAspectRatio="xMidYMid meet"><path class="probability-graph-line" d="' + pathD + '" style="stroke:' + lineColor + '"/>';
+      pts.forEach(function (p) {
+        const dotClass = p.p >= 60 ? 'probability-graph-dot very' : p.p >= 35 ? 'probability-graph-dot high' : 'probability-graph-dot';
+        svg += '<circle class="' + dotClass + '" cx="' + x(p.ts).toFixed(2) + '" cy="' + y(p.p).toFixed(2) + '" r="5"/>';
+      });
+      svg += '</svg>';
+      el.innerHTML = svg;
     }
 
     function renderTimeline() {
