@@ -242,6 +242,7 @@
       color: var(--text-muted);
     }
     .driver-box strong { color: var(--text-primary); }
+    .driver-gap { font-size: 0.85em; opacity: 0.9; }
 
     .disclaimer {
       font-size: 0.8rem;
@@ -681,7 +682,8 @@
     </section>
 
     <div class="driver-box" id="driverBox">
-      <strong>Main driver:</strong> <span id="driverText">—</span>
+      <strong>Main driver:</strong> <span id="driverText">—</span><br>
+      <span id="gapText" class="driver-gap"></span>
     </div>
 
     <p class="disclaimer">
@@ -747,9 +749,7 @@
     <section class="explanation">
       <h3>How this estimate works</h3>
       <p>
-        The probability is a heuristic combining: (1) a base risk floor, (2) time-of-day progression so tension builds through the day non-linearly,
-        (3) recency of the last siren with exponential decay, (4) distance from the last siren to your location (closer = stronger effect),
-        and (5) a clustering bonus when multiple alerts occurred recently. The result is smoothed and clamped between 0.5% and 99.4%.
+        The probability uses <strong>historical data</strong>: we compute the average time between consecutive sirens at each place, then see how the current &quot;time since last siren&quot; compares. <strong>Under</strong> the average gap → higher probability; <strong>over</strong> → lower. We also add time-of-day progression, distance from the last siren to your location, and a clustering bonus for multiple recent alerts. Result is smoothed and clamped between 0.5% and 99.4%.
       </p>
       <div class="factors" id="factorsBreakdown">
         <!-- Filled by JS -->
@@ -842,6 +842,7 @@
     const PROB_HISTORY_INTERVAL_MS = 10 * 60 * 1000;
     const PROB_HISTORY_WINDOW_MS = 60 * 60 * 1000;
     let probabilityHistory = [];
+    let lastDisplayed = {};
     let state = {
       userLocationId: 'center',
       userLat: 32.0853,
@@ -999,8 +1000,8 @@
       let currentInterval = POLL_INTERVAL_WHEN_FAILING_MS;
       function poll() {
         fetchOrefAlerts().then(function (result) {
-          lastDataFetchTime = Date.now();
           if (result) {
+            lastDataFetchTime = Date.now();
             mergeApiAlertsIntoState(result);
             if (currentInterval !== POLL_INTERVAL_WHEN_LIVE_MS) {
               currentInterval = POLL_INTERVAL_WHEN_LIVE_MS;
@@ -1008,7 +1009,7 @@
               orefPollTimer = setInterval(poll, POLL_INTERVAL_WHEN_LIVE_MS);
             }
           } else {
-            updateUI();
+            updateUI(true);
           }
         }).catch(function () {});
       }
@@ -1059,15 +1060,40 @@
 
     const CONFIG = {
       baseFloor: 2,
-      dailyMaxBoost: 25,
-      recencyHalfLifeMinutes: 30,
+      dailyMaxBoost: 22,
+      defaultAverageGapMinutes: 60,
+      gapContribMax: 50,
       distanceScaleKm: 50,
       clusterBonusPerAlert: 3,
       maxClusterBonus: 15,
       minP: 0.5,
       maxP: 99.4,
-      smoothing: 0.12,
+      smoothing: 0.28,
     };
+
+    // From historical data: average time between consecutive sirens at same place; how far we are under/over that.
+    function getHistoricalGapStats() {
+      const events = [...recentSirenEvents].sort((a, b) => a.ts - b.ts);
+      const placeKey = (e) => (e.city || '') + '|' + (Math.round((e.lat || 0) * 100) / 100) + '|' + (Math.round((e.lon || 0) * 100) / 100);
+      const byPlace = new Map();
+      for (const e of events) {
+        const key = placeKey(e);
+        if (!byPlace.has(key)) byPlace.set(key, []);
+        byPlace.get(key).push(e.ts);
+      }
+      const gaps = [];
+      for (const [, tsList] of byPlace) {
+        tsList.sort((a, b) => a - b);
+        for (let i = 1; i < tsList.length; i++) {
+          const gapMin = (tsList[i] - tsList[i - 1]) / 60000;
+          if (gapMin < 1) continue;
+          gaps.push(gapMin);
+        }
+      }
+      const averageGap = gaps.length > 0 ? gaps.reduce((s, g) => s + g, 0) / gaps.length : CONFIG.defaultAverageGapMinutes;
+      const minutesUnderOver = averageGap - state.minutesSinceLastSiren;
+      return { averageGap, minutesUnderOver, gapCount: gaps.length };
+    }
 
     function getDayProgression() {
       const now = new Date();
@@ -1077,10 +1103,11 @@
       return Math.pow(t, 0.7) + 0.15 * Math.sin(t * Math.PI * 2);
     }
 
-    function getRecencyBoost(minutesSince) {
-      if (minutesSince < 0) minutesSince = 0;
-      const decay = Math.exp(-(minutesSince / CONFIG.recencyHalfLifeMinutes) * Math.LN2);
-      return decay * 40;
+    // Contribution from how close we are to historical average gap (under = higher, over = lower).
+    function getGapContribution(averageGapMinutes, minutesSinceLast) {
+      if (averageGapMinutes <= 0) return 0;
+      const ratio = Math.max(0, minutesSinceLast) / averageGapMinutes;
+      return Math.max(0, CONFIG.gapContribMax * (1 - Math.min(ratio, 2) / 2));
     }
 
     function getDistanceImpact(userLat, userLon, sirenLat, sirenLon) {
@@ -1095,19 +1122,22 @@
     }
 
     function computeRawProbability() {
+      const { averageGap, minutesUnderOver } = getHistoricalGapStats();
       const dayProg = Math.max(0, getDayProgression());
       const dayContrib = dayProg * CONFIG.dailyMaxBoost;
-      const recencyContrib = getRecencyBoost(state.minutesSinceLastSiren);
+      const gapContrib = getGapContribution(averageGap, state.minutesSinceLastSiren);
       const distanceContrib = getDistanceImpact(state.userLat, state.userLon, state.lastSirenLat, state.lastSirenLon);
       const clusterContrib = getClusterBonus(state.recentAlertsCount);
-      let raw = CONFIG.baseFloor + dayContrib + recencyContrib + distanceContrib + clusterContrib;
+      let raw = CONFIG.baseFloor + dayContrib + gapContrib + distanceContrib + clusterContrib;
       raw = Math.max(CONFIG.minP, Math.min(CONFIG.maxP, raw));
       return {
         probability: raw,
+        averageGap,
+        minutesUnderOver,
         factors: {
           base: CONFIG.baseFloor,
           day: dayContrib,
-          recency: recencyContrib,
+          gap: gapContrib,
           distance: distanceContrib,
           cluster: clusterContrib,
         },
@@ -1125,7 +1155,8 @@
     function getMainDriver(factors) {
       const arr = [
         { name: 'Time-based escalation', v: factors.day },
-        { name: 'Recent nearby alert', v: factors.recency + factors.distance },
+        { name: 'Below typical gap (historical)', v: factors.gap },
+        { name: 'Distance from last siren', v: factors.distance },
         { name: 'Recent alert cluster', v: factors.cluster },
       ];
       arr.sort((a, b) => b.v - a.v);
@@ -1152,7 +1183,16 @@
       return { fill: 'var(--accent-red)', glow: 'var(--glow-high)' };
     }
 
-    function updateUI() {
+    function setIfChanged(id, value, formatter) {
+      const key = id;
+      const str = formatter ? formatter(value) : String(value);
+      if (lastDisplayed[key] === str) return;
+      lastDisplayed[key] = str;
+      const el = document.getElementById(id);
+      if (el) el.textContent = str;
+    }
+
+    function updateUI(skipWhenUnchanged) {
       const { probability, factors } = getSmoothedProbability();
       const displayP = Math.round(probability * 10) / 10;
 
@@ -1164,39 +1204,55 @@
       ring.style.setProperty('--gauge-glow', colors.glow);
       ring.classList.toggle('pulse', displayP >= 50);
 
-      document.getElementById('gaugeValue').textContent = displayP.toFixed(1);
+      setIfChanged('gaugeValue', displayP, function (v) { return v.toFixed(1); });
       const status = getStatusLabel(displayP);
       const statusEl = document.getElementById('statusLabel');
-      statusEl.textContent = status.text;
-      statusEl.className = 'status-label ' + status.class;
+      if (!skipWhenUnchanged || lastDisplayed.statusLabel !== status.text) {
+        lastDisplayed.statusLabel = status.text;
+        statusEl.textContent = status.text;
+        statusEl.className = 'status-label ' + status.class;
+      }
 
       const trend = getTrend(state.lastDisplayedProbability, probability);
       state.lastDisplayedProbability = probability;
-      document.getElementById('trendIcon').textContent = trend.icon;
-      document.getElementById('trendText').textContent = trend.text;
+      setIfChanged('trendIcon', trend.icon, String);
+      setIfChanged('trendText', trend.text, String);
 
-      document.getElementById('driverText').textContent = getMainDriver(factors);
+      const driverText = getMainDriver(factors);
+      setIfChanged('driverText', driverText, String);
+      const gapEl = document.getElementById('gapText');
+      if (gapEl) {
+        const { averageGap, minutesUnderOver } = getHistoricalGapStats();
+        const gapStr = 'Avg gap (history): ' + averageGap.toFixed(0) + ' min · ' + (minutesUnderOver > 0 ? minutesUnderOver.toFixed(0) + ' min under' : Math.abs(minutesUnderOver).toFixed(0) + ' min over') + ' average';
+        if (!skipWhenUnchanged || lastDisplayed.gapText !== gapStr) {
+          lastDisplayed.gapText = gapStr;
+          gapEl.textContent = gapStr;
+        }
+      }
 
-      document.getElementById('cardTimeSince').textContent =
-        state.minutesSinceLastSiren < 60
-          ? `${state.minutesSinceLastSiren} min ago`
-          : `${(state.minutesSinceLastSiren / 60).toFixed(1)} h ago`;
+      const timeSinceStr = state.minutesSinceLastSiren < 60 ? `${state.minutesSinceLastSiren} min ago` : `${(state.minutesSinceLastSiren / 60).toFixed(1)} h ago`;
+      setIfChanged('cardTimeSince', timeSinceStr, String);
       const distKm = haversineKm(state.userLat, state.userLon, state.lastSirenLat, state.lastSirenLon);
-      document.getElementById('cardDistance').textContent = `${distKm.toFixed(1)} km`;
+      setIfChanged('cardDistance', distKm.toFixed(1) + ' km', String);
       const distPct = Math.min(100, (distKm / 100) * 100);
       document.getElementById('distanceVisualFill').style.width = `${100 - distPct}%`;
-      document.getElementById('cardRecentCount').textContent = state.recentAlertsCount;
-      document.getElementById('cardDataSource').textContent = dataSource === 'api' ? 'Live (Pikud HaOref)' : 'Demo data';
-      const updatedEl = document.getElementById('cardUpdated');
-      updatedEl.textContent = lastDataFetchTime ? new Date(lastDataFetchTime).toLocaleTimeString() : '—';
+      setIfChanged('cardRecentCount', state.recentAlertsCount, String);
+      const dataSourceStr = dataSource === 'api' ? 'Live (Pikud HaOref)' : 'Demo data';
+      setIfChanged('cardDataSource', dataSourceStr, String);
+      const updatedStr = lastDataFetchTime ? new Date(lastDataFetchTime).toLocaleTimeString() : '—';
+      setIfChanged('cardUpdated', updatedStr, String);
 
-      document.getElementById('factorsBreakdown').innerHTML = [
+      const factorsStr = [
         `base: ${factors.base.toFixed(1)}%`,
         `day: +${factors.day.toFixed(1)}%`,
-        `recency: +${factors.recency.toFixed(1)}%`,
+        `gap (vs avg): +${factors.gap.toFixed(1)}%`,
         `distance: +${factors.distance.toFixed(1)}%`,
         `cluster: +${factors.cluster.toFixed(1)}%`,
       ].map(s => `<div>${s}</div>`).join('');
+      if (!skipWhenUnchanged || lastDisplayed.factorsBreakdown !== factorsStr) {
+        lastDisplayed.factorsBreakdown = factorsStr;
+        document.getElementById('factorsBreakdown').innerHTML = factorsStr;
+      }
 
       document.getElementById('ambientBg').style.opacity = 0.3 + (displayP / 100) * 0.2;
 
@@ -1213,8 +1269,8 @@
       const el = document.getElementById('probabilityGraph');
       if (!el) return;
       const pts = probabilityHistory;
-      if (pts.length < 2) {
-        el.innerHTML = '<p style="margin:0;padding:1rem;color:var(--text-muted);font-size:0.85rem;">Collecting data… (one point every 10 min)</p>';
+      if (pts.length < 1) {
+        el.innerHTML = '<p style="margin:0;padding:1rem;color:var(--text-muted);font-size:0.85rem;">Collecting data…</p>';
         return;
       }
       const vbW = 300;
@@ -1227,8 +1283,11 @@
       const gh = vbH - pad.top - pad.bottom;
       const x = (ts) => pad.left + ((ts - xMin) / xRange) * gw;
       const y = (p) => pad.top + gh - (p / 100) * gh;
-      const pathD = pts.map((p, i) => (i === 0 ? 'M' : 'L') + x(p.ts).toFixed(2) + ',' + y(p.p).toFixed(2)).join(' ');
-      const lineColor = pts[pts.length - 1].p >= 60 ? 'var(--accent-red)' : pts[pts.length - 1].p >= 35 ? 'var(--accent-amber)' : 'var(--accent-cyan)';
+      const lastP = pts[pts.length - 1];
+      const lineColor = lastP.p >= 60 ? 'var(--accent-red)' : lastP.p >= 35 ? 'var(--accent-amber)' : 'var(--accent-cyan)';
+      const pathD = pts.length >= 2
+        ? pts.map((p, i) => (i === 0 ? 'M' : 'L') + x(p.ts).toFixed(2) + ',' + y(p.p).toFixed(2)).join(' ')
+        : 'M' + pad.left + ',' + y(lastP.p).toFixed(2) + ' L' + (pad.left + gw).toFixed(2) + ',' + y(lastP.p).toFixed(2);
       let svg = '<svg viewBox="0 0 ' + vbW + ' ' + vbH + '" preserveAspectRatio="xMidYMid meet"><path class="probability-graph-line" d="' + pathD + '" style="stroke:' + lineColor + '"/>';
       pts.forEach(function (p) {
         const dotClass = p.p >= 60 ? 'probability-graph-dot very' : p.p >= 35 ? 'probability-graph-dot high' : 'probability-graph-dot';
