@@ -607,8 +607,8 @@
     }
     .probability-graph {
       width: 100%;
-      height: 160px;
-      min-height: 140px;
+      height: 100px;
+      min-height: 90px;
       border-radius: 8px;
       background: var(--glass);
       border: 1px solid var(--glass-border);
@@ -625,21 +625,20 @@
     .probability-graph .axis-label { fill: var(--text-muted); font-size: 10px; font-family: 'JetBrains Mono', monospace; }
     .probability-graph-line {
       fill: none;
-      stroke: url(#probabilityLineGradient);
-      stroke-width: 2.5;
+      stroke: var(--accent-cyan);
+      stroke-width: 2;
       stroke-linecap: round;
       stroke-linejoin: round;
+      transition: stroke 0.3s ease;
     }
     .probability-graph-dot {
       fill: var(--bg-panel);
       stroke: var(--accent-cyan);
-      stroke-width: 1.5;
-    }
-    .probability-graph-dot.current {
-      fill: var(--accent-cyan);
-      stroke: var(--bg-panel);
       stroke-width: 2;
+      transition: fill 0.3s ease, stroke 0.3s ease;
     }
+    .probability-graph-dot.high { stroke: var(--accent-amber); }
+    .probability-graph-dot.very { stroke: var(--accent-red); }
 
     footer {
       text-align: center;
@@ -1273,8 +1272,8 @@
         return;
       }
       const vbW = 340;
-      const vbH = 140;
-      const pad = { top: 10, right: 12, bottom: 24, left: 44 };
+      const vbH = 100;
+      const pad = { top: 8, right: 12, bottom: 20, left: 44 };
       const gw = vbW - pad.left - pad.right;
       const gh = vbH - pad.top - pad.bottom;
       const xMin = Math.min(...pts.map((p) => p.ts));
@@ -1282,46 +1281,27 @@
       const xRange = xMax - xMin || 1;
       const x = (ts) => pad.left + ((ts - xMin) / xRange) * gw;
       const y = (p) => pad.top + gh - (p / 100) * gh;
-      const coords = pts.map(function (p) { return { x: x(p.ts), y: y(p.p) }; });
-      var pathD;
-      if (coords.length >= 2) {
-        var tension = 0.25;
-        pathD = 'M' + coords[0].x.toFixed(2) + ',' + coords[0].y.toFixed(2);
-        for (var i = 0; i < coords.length - 1; i++) {
-          var p0 = coords[Math.max(0, i - 1)];
-          var p1 = coords[i];
-          var p2 = coords[i + 1];
-          var p3 = coords[Math.min(coords.length - 1, i + 2)];
-          var cp1x = p1.x + (p2.x - p0.x) * tension;
-          var cp1y = p1.y + (p2.y - p0.y) * tension;
-          var cp2x = p2.x - (p3.x - p1.x) * tension;
-          var cp2y = p2.y - (p3.y - p1.y) * tension;
-          pathD += ' C' + cp1x.toFixed(2) + ',' + cp1y.toFixed(2) + ' ' + cp2x.toFixed(2) + ',' + cp2y.toFixed(2) + ' ' + p2.x.toFixed(2) + ',' + p2.y.toFixed(2);
-        }
-      } else {
-        var lastP = pts[pts.length - 1];
-        pathD = 'M' + pad.left + ',' + y(lastP.p).toFixed(2) + ' L' + (pad.left + gw).toFixed(2) + ',' + y(lastP.p).toFixed(2);
-      }
-      var gradientId = 'probabilityLineGradient';
-      var defs = '<defs>';
-      defs += '<linearGradient id="' + gradientId + '" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#00d4aa"/><stop offset="100%" stop-color="#00a884"/>';
-      defs += '</linearGradient>';
-      defs += '<style>.axis-line{stroke:rgba(255,255,255,0.12);stroke-width:1}.grid-line{stroke:rgba(255,255,255,0.08);stroke-width:0.5}.axis-label{fill:#8b95a8;font-size:10px;font-family:JetBrains Mono,monospace}</style></defs>';
-      var svg = '<svg viewBox="0 0 ' + vbW + ' ' + vbH + '" preserveAspectRatio="none" width="100%" height="100%">' + defs;
+      const lastP = pts[pts.length - 1];
+      const lineColor = lastP.p >= 60 ? 'var(--accent-red)' : lastP.p >= 35 ? 'var(--accent-amber)' : 'var(--accent-cyan)';
+      const pathD =
+        pts.length >= 2
+          ? pts.map((p, i) => (i === 0 ? 'M' : 'L') + x(p.ts).toFixed(2) + ',' + y(p.p).toFixed(2)).join(' ')
+          : 'M' + pad.left + ',' + y(lastP.p).toFixed(2) + ' L' + (pad.left + gw).toFixed(2) + ',' + y(lastP.p).toFixed(2);
+      let svg = '<svg viewBox="0 0 ' + vbW + ' ' + vbH + '" preserveAspectRatio="none" width="100%" height="100%">';
+      svg += '<defs><style>.axis-line{stroke:rgba(255,255,255,0.12);stroke-width:1}.grid-line{stroke:rgba(255,255,255,0.08);stroke-width:0.5}.axis-label{fill:#8b95a8;font-size:10px;font-family:JetBrains Mono,monospace}</style></defs>';
       svg += '<line class="axis-line" x1="' + pad.left + '" y1="' + pad.top + '" x2="' + pad.left + '" y2="' + (pad.top + gh) + '"/>';
       svg += '<line class="axis-line" x1="' + pad.left + '" y1="' + (pad.top + gh) + '" x2="' + (pad.left + gw) + '" y2="' + (pad.top + gh) + '"/>';
       [0, 25, 50, 75, 100].forEach(function (v) {
-        var yy = y(v);
+        const yy = y(v);
         if (v > 0 && v < 100) svg += '<line class="grid-line" x1="' + pad.left + '" y1="' + yy.toFixed(2) + '" x2="' + (pad.left + gw) + '" y2="' + yy.toFixed(2) + '"/>';
         svg += '<text class="axis-label" x="' + (pad.left - 6) + '" y="' + (yy + 3) + '" text-anchor="end">' + v + '%</text>';
       });
       svg += '<text class="axis-label" x="' + pad.left + '" y="' + (vbH - 4) + '" text-anchor="start">Earlier</text>';
       svg += '<text class="axis-label" x="' + (pad.left + gw) + '" y="' + (vbH - 4) + '" text-anchor="end">Now</text>';
-      svg += '<path class="probability-graph-line" d="' + pathD + '"/>';
-      pts.forEach(function (p, i) {
-        var dotClass = (i === pts.length - 1) ? 'probability-graph-dot current' : 'probability-graph-dot';
-        var r = (i === pts.length - 1) ? 5 : 3.5;
-        svg += '<circle class="' + dotClass + '" cx="' + coords[i].x.toFixed(2) + '" cy="' + coords[i].y.toFixed(2) + '" r="' + r + '"/>';
+      svg += '<path class="probability-graph-line" d="' + pathD + '" style="stroke:' + lineColor + '"/>';
+      pts.forEach(function (p) {
+        const dotClass = p.p >= 60 ? 'probability-graph-dot very' : p.p >= 35 ? 'probability-graph-dot high' : 'probability-graph-dot';
+        svg += '<circle class="' + dotClass + '" cx="' + x(p.ts).toFixed(2) + '" cy="' + y(p.p).toFixed(2) + '" r="4"/>';
       });
       svg += '</svg>';
       el.innerHTML = svg;
