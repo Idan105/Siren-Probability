@@ -534,6 +534,7 @@
       padding: 0.5rem 0;
       border-bottom: 1px solid var(--glass-border);
       font-size: 0.88rem;
+      cursor: help;
     }
     .breakdown-list li:last-child { border-bottom: none; }
     .breakdown-list .breakdown-label { color: var(--text-primary); }
@@ -1208,7 +1209,8 @@
     function getMainDriver(factors) {
       const arr = [
         { name: 'Time of day (region pattern)', v: factors.day != null ? factors.day : 0 },
-        { name: 'Time since last alarm (region)', v: factors.gap != null ? factors.gap : 0 },
+        { name: 'Time since last alarm (region)', v: factors.timeSince != null ? factors.timeSince : 0 },
+        { name: 'Average time between alarms', v: factors.gap != null ? factors.gap : 0 },
       ];
       arr.sort((a, b) => b.v - a.v);
       return arr[0].v > 1 ? arr[0].name : 'Base risk level';
@@ -1299,7 +1301,7 @@
         const section = document.getElementById('probabilityGraphSection');
         if (section) section.style.display = '';
         renderProbabilityGraph(regionHistory);
-        renderBreakdownList(regionData.breakdown);
+        renderBreakdownList(regionData.breakdown, probability);
       } else {
         const out = getSmoothedProbability();
         probability = out.probability;
@@ -1414,7 +1416,7 @@
       });
     }
 
-    function renderBreakdownList(breakdown) {
+    function renderBreakdownList(breakdown, totalProbability) {
       const el = document.getElementById('breakdownList');
       const section = document.getElementById('breakdownSection');
       if (!el || !section) return;
@@ -1423,11 +1425,14 @@
         return;
       }
       section.style.display = '';
+      const total = totalProbability != null && totalProbability > 0 ? totalProbability : 1;
       el.innerHTML = breakdown.map((item) => {
         const valueStr = item.value != null ? `${item.value} ${item.valueUnit || ''}`.trim() : '—';
         const percentStr = item.percentContrib != null ? `+${item.percentContrib}%` : '';
         const desc = item.description ? ` <span class="breakdown-value">(${item.description})</span>` : '';
-        return `<li><span class="breakdown-label">${item.label}</span><span class="breakdown-value">${valueStr}</span><span class="breakdown-percent">${percentStr}</span>${desc}</li>`;
+        const pctOfTotal = item.percentContrib != null ? ((item.percentContrib / total) * 100).toFixed(1) : null;
+        const tooltip = pctOfTotal != null ? `Contributes +${item.percentContrib}%. ${pctOfTotal}% of total probability.` : (item.description || item.label);
+        return `<li title="${tooltip.replace(/"/g, '&quot;')}"><span class="breakdown-label">${item.label}</span><span class="breakdown-value">${valueStr}</span><span class="breakdown-percent">${percentStr}</span>${desc}</li>`;
       }).join('');
     }
 
