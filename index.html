@@ -261,6 +261,7 @@
       border-radius: 14px;
       padding: 1.25rem;
       margin-bottom: 1.5rem;
+      overflow: visible;
     }
     .controls h3 {
       font-size: 0.95rem;
@@ -351,6 +352,10 @@
     .region-select.open .region-select-trigger {
       border-color: var(--accent-cyan);
       box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.25);
+      z-index: 0;
+    }
+    .region-select.open .region-select-panel {
+      z-index: 1;
     }
     .region-select-trigger::after {
       content: '';
@@ -369,7 +374,7 @@
       top: calc(100% + 4px);
       left: 0;
       right: 0;
-      z-index: 1000;
+      z-index: 1;
       background: var(--bg-panel);
       border: 1px solid var(--glass-border);
       border-radius: 8px;
@@ -1225,7 +1230,7 @@
         { name: 'Average time between alarms', v: factors.gap != null ? factors.gap : 0 },
       ];
       arr.sort((a, b) => b.v - a.v);
-      return arr[0].v > 1 ? arr[0].name : 'Base risk level';
+      return arr[0].v > 0 ? arr[0].name : 'Time of day (region pattern)';
     }
 
     function getStatusLabel(p) {
@@ -1438,16 +1443,17 @@
       }
       section.style.display = '';
       const total = totalProbability != null && totalProbability > 0 ? totalProbability : 1;
-      const sumContrib = breakdown.reduce((s, item) => s + (item.percentContrib != null ? item.percentContrib : 0), 0);
+      const sumRaw = breakdown.reduce((s, item) => s + (item.percentContrib != null ? item.percentContrib : 0), 0);
       const rows = breakdown.map((item) => {
         const valueStr = item.value != null ? `${item.value} ${item.valueUnit || ''}`.trim() : '—';
-        const percentStr = item.percentContrib != null ? `+${item.percentContrib}%` : '';
+        const shareOfTotal = sumRaw > 0 && item.percentContrib != null ? (item.percentContrib / sumRaw) * total : (item.percentContrib != null ? item.percentContrib : 0);
+        const percentStr = item.percentContrib != null ? `+${shareOfTotal.toFixed(2)}%` : '';
         const desc = item.description ? ` <span class="breakdown-value">(${item.description})</span>` : '';
-        const pctOfTotal = item.percentContrib != null ? ((item.percentContrib / total) * 100).toFixed(1) : null;
-        const tooltip = pctOfTotal != null ? `Contributes +${item.percentContrib}%. ${pctOfTotal}% of total probability.` : (item.description || item.label);
+        const pctOfTotal = sumRaw > 0 && item.percentContrib != null ? ((item.percentContrib / sumRaw) * 100).toFixed(1) : null;
+        const tooltip = pctOfTotal != null ? `${pctOfTotal}% of total probability (${total.toFixed(1)}%).` : (item.description || item.label);
         return `<li title="${tooltip.replace(/"/g, '&quot;')}"><span class="breakdown-label">${item.label}</span><span class="breakdown-value">${valueStr}</span><span class="breakdown-percent">${percentStr}</span>${desc}</li>`;
       }).join('');
-      el.innerHTML = rows + `<li class="breakdown-sum" title="The gauge may differ slightly due to smoothing."><span class="breakdown-label">Sum of contributions</span><span class="breakdown-value"></span><span class="breakdown-percent">${sumContrib.toFixed(1)}%</span> <span class="breakdown-value">(gauge uses smoothed value)</span></li>`;
+      el.innerHTML = rows + `<li class="breakdown-sum" title="Sum equals total probability (gauge)."><span class="breakdown-label">Total probability</span><span class="breakdown-value"></span><span class="breakdown-percent">${total.toFixed(1)}%</span></li>`;
     }
 
     async function init() {
