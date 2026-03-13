@@ -1458,7 +1458,8 @@
         }
       }
 
-      const timeSinceStr = (minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren) < 60 ? `${(minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren)} min ago` : `${((minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren) / 60).toFixed(1)} h ago`;
+      const mins = minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren;
+      const timeSinceStr = mins < 60 ? `${Math.round(mins)} min ago` : `${(mins / 60).toFixed(1)} h ago`;
       setIfChanged('cardTimeSince', timeSinceStr, String);
       const updatedStr = useServerProbability && serverUiData && serverUiData.timestamp ? new Date(serverUiData.timestamp).toLocaleTimeString() : (lastDataFetchTime ? new Date(lastDataFetchTime).toLocaleTimeString() : '—');
       setIfChanged('cardUpdated', updatedStr, String);
