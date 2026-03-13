@@ -610,7 +610,7 @@
       transition: width 0.4s ease;
     }
 
-    /* Probability over time (from ui-data.json) */
+    /* Recent readings (from ui-data.json) */
     .probability-history-section {
       background: var(--bg-panel);
       backdrop-filter: blur(12px);
@@ -625,54 +625,49 @@
       margin-bottom: 0.25rem;
       color: var(--text-primary);
     }
-    .probability-history-subtitle {
+    .probability-history-summary {
       font-size: 0.8rem;
       color: var(--text-muted);
       margin-bottom: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
     }
-    .probability-history-chart {
-      width: 100%;
-      height: 160px;
-      min-height: 120px;
-      border-radius: 10px;
+    .probability-history-list {
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 0.5rem;
+    }
+    .probability-history-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.5rem;
+      border-radius: 8px;
       background: var(--glass);
       border: 1px solid var(--glass-border);
-      overflow: hidden;
-      position: relative;
-    }
-    .probability-history-chart svg {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-    .probability-history-meta {
-      margin-top: 0.5rem;
       font-size: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .probability-history-item .time {
       color: var(--text-muted);
-      font-family: 'JetBrains Mono', monospace;
+      flex-shrink: 0;
     }
-    .probability-history-chart circle {
-      cursor: pointer;
+    .probability-history-item .pct {
+      font-weight: 600;
+      margin-left: auto;
     }
-    .probability-history-tooltip {
-      position: absolute;
-      pointer-events: none;
-      padding: 0.35rem 0.6rem;
-      border-radius: 6px;
-      background: var(--bg-panel);
-      border: 1px solid var(--glass-border);
-      font-size: 0.75rem;
-      font-family: 'JetBrains Mono', monospace;
-      color: var(--text-primary);
-      opacity: 0;
-      transition: opacity 0.15s ease;
-      z-index: 10;
-      white-space: nowrap;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    .probability-history-item .pct.low { color: var(--accent-cyan); }
+    .probability-history-item .pct.mid { color: var(--accent-amber); }
+    .probability-history-item .pct.high { color: var(--accent-red); }
+    .probability-history-item .bar {
+      width: 4px;
+      border-radius: 2px;
+      align-self: stretch;
+      min-height: 1.2em;
     }
-    .probability-history-tooltip.visible {
-      opacity: 1;
-    }
+    .probability-history-item .bar.low { background: var(--accent-cyan); }
+    .probability-history-item .bar.mid { background: var(--accent-amber); }
+    .probability-history-item .bar.high { background: var(--accent-red); }
 
     footer {
       text-align: center;
@@ -744,12 +739,8 @@
       .probability-history-section {
         padding: 1rem;
       }
-      .probability-history-chart {
-        height: clamp(120px, 28vh, 160px);
-      }
-      .probability-history-tooltip {
-        font-size: 0.7rem;
-        padding: 0.3rem 0.5rem;
+      .probability-history-list {
+        grid-template-columns: repeat(2, 1fr);
       }
       .card-label {
         font-size: 0.7rem;
@@ -871,10 +862,9 @@
     </div>
 
     <section class="probability-history-section" id="probabilityHistorySection" style="display: none;">
-      <h3>Probability over time</h3>
-      <p class="probability-history-subtitle" id="probabilityHistorySubtitle"></p>
-      <div class="probability-history-chart" id="probabilityHistoryChart" role="img" aria-label="Probability over time"></div>
-      <p class="probability-history-meta" id="probabilityHistoryMeta"></p>
+      <h3>Recent readings</h3>
+      <p class="probability-history-summary" id="probabilityHistorySummary"></p>
+      <ul class="probability-history-list" id="probabilityHistoryList" aria-label="Recent probability readings"></ul>
     </section>
 
     <section class="breakdown-section" id="breakdownSection" style="display: none;">
@@ -1315,126 +1305,45 @@
       if (el) el.textContent = str;
     }
 
-    function formatTimeAgo(ts) {
+    function formatReadingTime(ts) {
       var d = new Date(ts);
       var diff = Date.now() - ts;
       if (diff < 60000) return 'Now';
-      if (diff < 3600000) return Math.round(diff / 60000) + 'm ago';
-      if (diff < 86400000) return Math.round(diff / 3600000) + 'h ago';
+      if (diff < 3600000) return Math.round(diff / 60000) + 'm';
       return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
     }
-    function formatTimeAxis(ts) {
-      var d = new Date(ts);
-      return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+    function pctClass(p) {
+      return p >= 60 ? 'high' : p >= 35 ? 'mid' : 'low';
     }
     function renderProbabilityHistory(regionData) {
-      const chartEl = document.getElementById('probabilityHistoryChart');
-      const subtitleEl = document.getElementById('probabilityHistorySubtitle');
-      const metaEl = document.getElementById('probabilityHistoryMeta');
-      if (!chartEl) return;
+      const summaryEl = document.getElementById('probabilityHistorySummary');
+      const listEl = document.getElementById('probabilityHistoryList');
+      if (!listEl) return;
       const pts = Array.isArray(regionData.history) ? regionData.history : [];
       const regionName = regionData.name || 'Region';
 
-      if (subtitleEl) subtitleEl.textContent = regionName + ' · last 4 hours';
-
       if (pts.length < 1) {
-        chartEl.innerHTML = '<p style="margin:0;padding:1rem;color:var(--text-muted);font-size:0.85rem;">Collecting data…</p>';
-        if (metaEl) metaEl.textContent = '';
+        if (summaryEl) summaryEl.textContent = regionName + ' · Collecting data…';
+        listEl.innerHTML = '';
         return;
       }
 
-      const vbW = 320;
-      const vbH = 140;
-      const pad = { top: 10, right: 10, bottom: 24, left: 38 };
-      const gw = vbW - pad.left - pad.right;
-      const gh = vbH - pad.top - pad.bottom;
-      const dataMin = Math.min(...pts.map(function (p) { return p.ts; }));
-      const dataMax = Math.max(...pts.map(function (p) { return p.ts; }));
-      const maxWindowMs = 4 * 60 * 60 * 1000;
-      const xRange = Math.min(Math.max(dataMax - dataMin || 1, 60000), maxWindowMs);
-      const xMax = dataMax;
-      const xMin = xMax - xRange;
-      function x(ts) { return pad.left + ((ts - xMin) / xRange) * gw; }
-      function y(p) { return pad.top + gh - (p / 100) * gh; }
-
-      const lastP = pts[pts.length - 1];
-      var lineColorHex = lastP.p >= 60 ? '#ef4444' : lastP.p >= 35 ? '#f59e0b' : '#00d4aa';
-
-      var pathParts = [];
-      var areaPaths = [];
-      var segStart = 0;
-      for (var i = 1; i <= pts.length; i++) {
-        var bigDrop = i < pts.length && (pts[i - 1].p - pts[i].p) > 40;
-        if (i === pts.length || bigDrop) {
-          var seg = pts.slice(segStart, i);
-          if (seg.length >= 2) {
-            var d = seg.map(function (p, j) { return (j === 0 ? 'M' : 'L') + x(p.ts).toFixed(2) + ',' + y(p.p).toFixed(2); }).join(' ');
-            pathParts.push(d);
-            areaPaths.push(d + ' L' + x(seg[seg.length - 1].ts).toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' L' + x(seg[0].ts).toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' Z');
-          } else if (seg.length === 1) {
-            var px = x(seg[0].ts);
-            var py = y(seg[0].p);
-            pathParts.push('M' + px.toFixed(2) + ',' + py.toFixed(2) + ' L' + (px + 2).toFixed(2) + ',' + py.toFixed(2));
-            areaPaths.push('M' + px.toFixed(2) + ',' + py.toFixed(2) + ' L' + (px + 2).toFixed(2) + ',' + py.toFixed(2) + ' L' + (px + 2).toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' L' + px.toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' Z');
-          }
-          segStart = i;
-        }
+      var minP = Math.min.apply(null, pts.map(function (p) { return p.p; }));
+      var maxP = Math.max.apply(null, pts.map(function (p) { return p.p; }));
+      var lastP = pts[pts.length - 1].p;
+      if (summaryEl) {
+        summaryEl.textContent = regionName + ' · Peak ' + Math.round(maxP) + '% · Low ' + Math.round(minP) + '% · Now ' + Math.round(lastP) + '%';
       }
-      var pathD = pathParts.length ? pathParts.join(' ') : 'M' + pad.left + ',' + y(lastP.p).toFixed(2) + ' L' + (pad.left + gw).toFixed(2) + ',' + y(lastP.p).toFixed(2);
 
-      var svg = '<svg viewBox="0 0 ' + vbW + ' ' + vbH + '" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" aria-label="Probability over time">';
-      svg += '<defs><linearGradient id="probAreaGrad" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="' + lineColorHex + '" stop-opacity="0.25"/><stop offset="100%" stop-color="' + lineColorHex + '" stop-opacity="0.02"/></linearGradient></defs>';
-      areaPaths.forEach(function (areaD) { svg += '<path fill="url(#probAreaGrad)" d="' + areaD + '"/>'; });
-      svg += '<path fill="none" stroke="' + lineColorHex + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="' + pathD + '"/>';
-      [0, 25, 50, 75, 100].forEach(function (v) {
-        var yy = y(v);
-        if (v > 0 && v < 100) svg += '<line x1="' + pad.left + '" y1="' + yy.toFixed(2) + '" x2="' + (pad.left + gw) + '" y2="' + yy.toFixed(2) + '" stroke="var(--glass-border)" stroke-width="0.5" opacity="0.6"/>';
-        svg += '<text x="' + (pad.left - 6) + '" y="' + (yy + 3) + '" text-anchor="end" fill="var(--text-muted)" font-size="9" font-family="JetBrains Mono,monospace">' + v + '%</text>';
-      });
-      svg += '<text x="' + pad.left + '" y="' + (vbH - 4) + '" text-anchor="start" fill="var(--text-muted)" font-size="9" font-family="JetBrains Mono,monospace">' + formatTimeAxis(xMin) + '</text>';
-      svg += '<text x="' + (pad.left + gw / 2) + '" y="' + (vbH - 4) + '" text-anchor="middle" fill="var(--text-muted)" font-size="9" font-family="JetBrains Mono,monospace">' + formatTimeAxis(xMin + xRange / 2) + '</text>';
-      svg += '<text x="' + (pad.left + gw) + '" y="' + (vbH - 4) + '" text-anchor="end" fill="var(--text-muted)" font-size="9" font-family="JetBrains Mono,monospace">' + formatTimeAxis(xMax) + '</text>';
-      pts.forEach(function (p, i) {
-        var dotColor = p.p >= 60 ? '#ef4444' : p.p >= 35 ? '#f59e0b' : '#00d4aa';
-        var label = formatTimeAgo(p.ts) + ' · ' + Math.round(p.p) + '%';
-        svg += '<circle cx="' + x(p.ts).toFixed(2) + '" cy="' + y(p.p).toFixed(2) + '" r="' + (i === pts.length - 1 ? 4 : 2.5) + '" fill="rgba(18,22,32,0.8)" stroke="' + dotColor + '" stroke-width="1.5" data-label="' + label.replace(/"/g, '&quot;') + '" aria-label="' + label.replace(/"/g, '&quot;') + '"/>';
-      });
-      svg += '</svg>';
-      chartEl.innerHTML = svg;
-
-      if (metaEl) metaEl.textContent = 'Latest: ' + formatTimeAgo(lastP.ts) + ' · ' + Math.round(lastP.p) + '% — tap a point for details';
-
-      var circles = chartEl.querySelectorAll('circle');
-      var tooltip = document.createElement('div');
-      tooltip.className = 'probability-history-tooltip';
-      tooltip.setAttribute('aria-hidden', 'true');
-      chartEl.style.position = 'relative';
-      chartEl.appendChild(tooltip);
-      function showTooltip(label, ev) {
-        tooltip.textContent = label;
-        tooltip.classList.add('visible');
-        var rect = chartEl.getBoundingClientRect();
-        var xPos = (ev && (ev.clientX != null || ev.touches)) ? (ev.touches ? ev.touches[0].clientX : ev.clientX) : rect.right - 80;
-        var yPos = (ev && (ev.clientY != null || ev.touches)) ? (ev.touches ? ev.touches[0].clientY : ev.clientY) : rect.bottom - 40;
-        var left = Math.min(Math.max(xPos - rect.left + 6, 4), rect.width - 100);
-        var top = Math.max(yPos - rect.top - 8, 4);
-        tooltip.style.left = left + 'px';
-        tooltip.style.top = top + 'px';
-      }
-      function hideTooltip() { tooltip.classList.remove('visible'); }
-      circles.forEach(function (c) {
-        var label = c.getAttribute('data-label') || '';
-        c.addEventListener('mouseenter', function (e) { showTooltip(label, e); });
-        c.addEventListener('mouseleave', hideTooltip);
-        c.addEventListener('touchstart', function (e) {
-          e.preventDefault();
-          if (tooltip.classList.contains('visible') && tooltip.textContent === label) hideTooltip();
-          else showTooltip(label, e);
-        }, { passive: false });
-      });
-      chartEl.addEventListener('touchend', function (e) {
-        if (e.target && e.target.tagName !== 'circle') hideTooltip();
-      });
+      var recent = pts.slice(-16);
+      listEl.innerHTML = recent.map(function (p) {
+        var cls = pctClass(p.p);
+        return '<li class="probability-history-item">' +
+          '<span class="bar ' + cls + '" aria-hidden="true"></span>' +
+          '<span class="time">' + formatReadingTime(p.ts) + '</span>' +
+          '<span class="pct ' + cls + '">' + Math.round(p.p) + '%</span>' +
+          '</li>';
+      }).join('');
     }
 
     function updateUI(skipWhenUnchanged) {
