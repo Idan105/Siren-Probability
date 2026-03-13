@@ -631,44 +631,6 @@
       margin-bottom: 0.75rem;
       font-family: 'JetBrains Mono', monospace;
     }
-    .probability-history-list {
-      list-style: none;
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-      gap: 0.5rem;
-    }
-    .probability-history-item {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.4rem 0.5rem;
-      border-radius: 8px;
-      background: var(--glass);
-      border: 1px solid var(--glass-border);
-      font-size: 0.75rem;
-      font-family: 'JetBrains Mono', monospace;
-    }
-    .probability-history-item .time {
-      color: var(--text-muted);
-      flex-shrink: 0;
-    }
-    .probability-history-item .pct {
-      font-weight: 600;
-      margin-left: auto;
-    }
-    .probability-history-item .pct.low { color: var(--accent-cyan); }
-    .probability-history-item .pct.mid { color: var(--accent-amber); }
-    .probability-history-item .pct.high { color: var(--accent-red); }
-    .probability-history-item .bar {
-      width: 4px;
-      border-radius: 2px;
-      align-self: stretch;
-      min-height: 1.2em;
-    }
-    .probability-history-item .bar.low { background: var(--accent-cyan); }
-    .probability-history-item .bar.mid { background: var(--accent-amber); }
-    .probability-history-item .bar.high { background: var(--accent-red); }
-
     .probability-history-chart-wrap {
       margin-bottom: 0.75rem;
       border-radius: 10px;
@@ -757,9 +719,6 @@
       }
       .probability-history-section {
         padding: 1rem;
-      }
-      .probability-history-list {
-        grid-template-columns: repeat(2, 1fr);
       }
       .card-label {
         font-size: 0.7rem;
@@ -886,7 +845,6 @@
       <div class="probability-history-chart-wrap" id="probabilityHistoryChartWrap">
         <div class="probability-history-chart" id="probabilityHistoryChart" role="img" aria-label="Probability over time"></div>
       </div>
-      <ul class="probability-history-list" id="probabilityHistoryList" aria-label="Recent probability readings"></ul>
     </section>
 
     <section class="breakdown-section" id="breakdownSection" style="display: none;">
@@ -1344,15 +1302,13 @@
     function renderProbabilityHistory(regionData) {
       const summaryEl = document.getElementById('probabilityHistorySummary');
       const chartEl = document.getElementById('probabilityHistoryChart');
-      const listEl = document.getElementById('probabilityHistoryList');
-      if (!listEl) return;
+      if (!chartEl) return;
       const pts = Array.isArray(regionData.history) ? regionData.history : [];
       const regionName = regionData.name || 'Region';
 
       if (pts.length < 1) {
         if (summaryEl) summaryEl.textContent = regionName + ' · Collecting data…';
-        if (chartEl) chartEl.innerHTML = '<p style="margin:0;padding:1rem;color:var(--text-muted);font-size:0.85rem;">Collecting data…</p>';
-        listEl.innerHTML = '';
+        chartEl.innerHTML = '<p style="margin:0;padding:1rem;color:var(--text-muted);font-size:0.85rem;">Collecting data…</p>';
         return;
       }
 
@@ -1378,55 +1334,29 @@
 
       var inWindow = pts.filter(function (p) { return p.ts >= xMin && p.ts <= xMax; });
       var lineColorHex = lastP >= 60 ? '#ef4444' : lastP >= 35 ? '#f59e0b' : '#00d4aa';
-      if (chartEl) {
-        if (inWindow.length < 2) {
-          chartEl.innerHTML = '<p style="margin:0;padding:0.5rem;color:var(--text-muted);font-size:0.8rem;">Not enough points in window yet.</p>';
-        } else {
-          var pathParts = [];
-          var areaPaths = [];
-          var segStart = 0;
-          for (var i = 1; i <= inWindow.length; i++) {
-            var bigDrop = i < inWindow.length && (inWindow[i - 1].p - inWindow[i].p) > 40;
-            if (i === inWindow.length || bigDrop) {
-              var seg = inWindow.slice(segStart, i);
-              if (seg.length >= 2) {
-                var d = seg.map(function (p, j) { return (j === 0 ? 'M' : 'L') + x(p.ts).toFixed(2) + ',' + y(p.p).toFixed(2); }).join(' ');
-                pathParts.push(d);
-                areaPaths.push(d + ' L' + x(seg[seg.length - 1].ts).toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' L' + x(seg[0].ts).toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' Z');
-              }
-              segStart = i;
-            }
-          }
-          var pathD = pathParts.join(' ');
-          var svg = '<svg viewBox="0 0 ' + vbW + ' ' + vbH + '" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" aria-label="Probability over time">';
-          svg += '<defs><linearGradient id="probAreaGrad" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="' + lineColorHex + '" stop-opacity="0.2"/><stop offset="100%" stop-color="' + lineColorHex + '" stop-opacity="0.02"/></linearGradient></defs>';
-          areaPaths.forEach(function (areaD) { svg += '<path fill="url(#probAreaGrad)" d="' + areaD + '"/>'; });
-          svg += '<path fill="none" stroke="' + lineColorHex + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="' + pathD + '"/>';
-          [0, 25, 50, 75, 100].forEach(function (v) {
-            var yy = y(v);
-            if (v > 0 && v < 100) svg += '<line x1="' + pad.left + '" y1="' + yy.toFixed(2) + '" x2="' + (pad.left + gw) + '" y2="' + yy.toFixed(2) + '" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>';
-            svg += '<text x="' + (pad.left - 6) + '" y="' + (yy + 3) + '" text-anchor="end" fill="#8b95a8" font-size="9" font-family="JetBrains Mono,monospace">' + v + '%</text>';
-          });
-          svg += '<text x="' + pad.left + '" y="' + (vbH - 4) + '" text-anchor="start" fill="#8b95a8" font-size="9" font-family="JetBrains Mono,monospace">' + formatTimeAxis(xMin) + '</text>';
-          svg += '<text x="' + (pad.left + gw) + '" y="' + (vbH - 4) + '" text-anchor="end" fill="#8b95a8" font-size="9" font-family="JetBrains Mono,monospace">' + formatTimeAxis(xMax) + '</text>';
-          inWindow.forEach(function (p, i) {
-            var dotColor = p.p >= 60 ? '#ef4444' : p.p >= 35 ? '#f59e0b' : '#00d4aa';
-            svg += '<circle cx="' + x(p.ts).toFixed(2) + '" cy="' + y(p.p).toFixed(2) + '" r="' + (i === inWindow.length - 1 ? 3.5 : 2) + '" fill="rgba(18,22,32,0.9)" stroke="' + dotColor + '" stroke-width="1.5"/>';
-          });
-          svg += '</svg>';
-          chartEl.innerHTML = svg;
-        }
+      if (inWindow.length < 2) {
+        chartEl.innerHTML = '<p style="margin:0;padding:0.5rem;color:var(--text-muted);font-size:0.8rem;">Not enough points in window yet.</p>';
+      } else {
+        var pathD = inWindow.map(function (p, j) { return (j === 0 ? 'M' : 'L') + x(p.ts).toFixed(2) + ',' + y(p.p).toFixed(2); }).join(' ');
+        var areaD = pathD + ' L' + x(inWindow[inWindow.length - 1].ts).toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' L' + x(inWindow[0].ts).toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' Z';
+        var svg = '<svg viewBox="0 0 ' + vbW + ' ' + vbH + '" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" aria-label="Probability over time">';
+        svg += '<defs><linearGradient id="probAreaGrad" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="' + lineColorHex + '" stop-opacity="0.2"/><stop offset="100%" stop-color="' + lineColorHex + '" stop-opacity="0.02"/></linearGradient></defs>';
+        svg += '<path fill="url(#probAreaGrad)" d="' + areaD + '"/>';
+        svg += '<path fill="none" stroke="' + lineColorHex + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="' + pathD + '"/>';
+        [0, 25, 50, 75, 100].forEach(function (v) {
+          var yy = y(v);
+          if (v > 0 && v < 100) svg += '<line x1="' + pad.left + '" y1="' + yy.toFixed(2) + '" x2="' + (pad.left + gw) + '" y2="' + yy.toFixed(2) + '" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>';
+          svg += '<text x="' + (pad.left - 6) + '" y="' + (yy + 3) + '" text-anchor="end" fill="#8b95a8" font-size="9" font-family="JetBrains Mono,monospace">' + v + '%</text>';
+        });
+        svg += '<text x="' + pad.left + '" y="' + (vbH - 4) + '" text-anchor="start" fill="#8b95a8" font-size="9" font-family="JetBrains Mono,monospace">' + formatTimeAxis(xMin) + '</text>';
+        svg += '<text x="' + (pad.left + gw) + '" y="' + (vbH - 4) + '" text-anchor="end" fill="#8b95a8" font-size="9" font-family="JetBrains Mono,monospace">' + formatTimeAxis(xMax) + '</text>';
+        inWindow.forEach(function (p, i) {
+          var dotColor = p.p >= 60 ? '#ef4444' : p.p >= 35 ? '#f59e0b' : '#00d4aa';
+          svg += '<circle cx="' + x(p.ts).toFixed(2) + '" cy="' + y(p.p).toFixed(2) + '" r="' + (i === inWindow.length - 1 ? 3.5 : 2) + '" fill="rgba(18,22,32,0.9)" stroke="' + dotColor + '" stroke-width="1.5"/>';
+        });
+        svg += '</svg>';
+        chartEl.innerHTML = svg;
       }
-
-      var recent = pts.slice(-16);
-      listEl.innerHTML = recent.map(function (p) {
-        var cls = pctClass(p.p);
-        return '<li class="probability-history-item">' +
-          '<span class="bar ' + cls + '" aria-hidden="true"></span>' +
-          '<span class="time">' + formatReadingTime(p.ts) + '</span>' +
-          '<span class="pct ' + cls + '">' + Math.round(p.p) + '%</span>' +
-          '</li>';
-      }).join('');
     }
 
     function updateUI(skipWhenUnchanged) {
