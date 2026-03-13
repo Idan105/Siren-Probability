@@ -608,8 +608,8 @@
     .probability-graph {
       position: relative;
       width: 100%;
-      height: 120px;
-      min-height: 100px;
+      height: 180px;
+      min-height: 140px;
       border-radius: 8px;
       background: var(--glass);
       border: 1px solid var(--glass-border);
@@ -734,8 +734,8 @@
         padding: 1rem;
       }
       .probability-graph {
-        height: 110px;
-        min-height: 95px;
+        height: clamp(140px, 32vh, 180px);
+        min-height: 120px;
       }
       .probability-graph-tooltip {
         font-size: 0.7rem;
@@ -1326,14 +1326,14 @@
         return;
       }
       const vbW = 340;
-      const vbH = 112;
-      const pad = { top: 8, right: 12, bottom: 28, left: 44 };
+      const vbH = 168;
+      const pad = { top: 12, right: 12, bottom: 32, left: 44 };
       const gw = vbW - pad.left - pad.right;
       const gh = vbH - pad.top - pad.bottom;
       const dataMin = Math.min(...pts.map((p) => p.ts));
       const dataMax = Math.max(...pts.map((p) => p.ts));
-      const minWindowMs = 6 * 60 * 60 * 1000;
-      const xRange = Math.max(dataMax - dataMin || 1, minWindowMs);
+      const maxWindowMs = 4 * 60 * 60 * 1000;
+      const xRange = Math.min(Math.max(dataMax - dataMin || 1, 60000), maxWindowMs);
       const xMax = dataMax;
       const xMin = xMax - xRange;
       const x = (ts) => pad.left + ((ts - xMin) / xRange) * gw;
