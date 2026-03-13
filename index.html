@@ -88,6 +88,7 @@
       letter-spacing: 0.05em;
     }
 
+    /* Desktop: region in top bar */
     .region-top-bar {
       display: flex;
       align-items: center;
@@ -101,6 +102,25 @@
       color: var(--text-muted);
     }
     .region-top-bar .region-select {
+      min-width: 200px;
+      max-width: 280px;
+    }
+    /* Mobile: region under gauge (centered) */
+    .hero-region {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+      margin-top: 0.25rem;
+      margin-bottom: 0.5rem;
+    }
+    .hero-region-label {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.03em;
+    }
+    .hero-region .region-select {
       min-width: 200px;
       max-width: 280px;
     }
@@ -353,7 +373,7 @@
       justify-content: space-between;
       padding: 0.5rem 0.75rem;
       min-height: 40px;
-      background: var(--bg-panel);
+      background: rgb(18, 22, 32);
       border: 1px solid var(--glass-border);
       border-radius: 8px;
       color: var(--text-primary);
@@ -392,7 +412,7 @@
       left: 0;
       right: 0;
       z-index: 1;
-      background: var(--bg-panel);
+      background: rgb(18, 22, 32);
       border: 1px solid var(--glass-border);
       border-radius: 8px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -678,6 +698,12 @@
 
     /* Responsive: iPhone and small screens */
     @media (max-width: 600px) {
+      .region-top-bar {
+        display: none;
+      }
+      .hero-region {
+        display: flex;
+      }
       .app {
         padding: 1rem;
         padding-left: max(1rem, env(safe-area-inset-left));
@@ -809,14 +835,9 @@
       <h1>Siren Probability Dashboard</h1>
     </header>
 
-    <div class="region-top-bar">
+    <div class="region-top-bar" id="regionTopBar">
       <span class="region-top-label">Region</span>
-      <div class="region-select" id="regionSelect">
-        <button type="button" class="region-select-trigger" id="regionSelectTrigger" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="regionSelectLabel">
-          <span id="regionSelectLabel">—</span>
-        </button>
-        <div class="region-select-panel" id="regionSelectPanel" role="listbox" aria-label="Region"></div>
-      </div>
+      <div id="regionSelectPlaceholder"></div>
     </div>
 
     <section class="hero">
@@ -829,6 +850,17 @@
           <div class="trend-arrow" id="trendArrow">
             <span id="trendIcon">—</span>
             <span id="trendText">—</span>
+          </div>
+        </div>
+      </div>
+      <div class="hero-region" id="heroRegion">
+        <span class="hero-region-label">Region</span>
+        <div id="regionSelectPlaceholderMobile">
+          <div class="region-select" id="regionSelect">
+            <button type="button" class="region-select-trigger" id="regionSelectTrigger" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="regionSelectLabel">
+              <span id="regionSelectLabel">—</span>
+            </button>
+            <div class="region-select-panel" id="regionSelectPanel" role="listbox" aria-label="Region"></div>
           </div>
         </div>
       </div>
@@ -1552,7 +1584,18 @@
       el.innerHTML = rows + `<li class="breakdown-sum"><span class="breakdown-label">Total (sum of factors)</span><span class="breakdown-value"></span><span class="breakdown-percent">${sumRaw.toFixed(1)}%</span></li>`;
     }
 
+    function placeRegionSelect() {
+      const el = document.getElementById('regionSelect');
+      const desktop = document.getElementById('regionSelectPlaceholder');
+      const mobile = document.getElementById('regionSelectPlaceholderMobile');
+      if (!el || !desktop || !mobile) return;
+      const target = window.innerWidth > 600 ? desktop : mobile;
+      if (el.parentNode !== target) target.appendChild(el);
+    }
+
     async function init() {
+      placeRegionSelect();
+      window.addEventListener('resize', placeRegionSelect);
       populateLocations();
       setupRegionDropdown();
 
