@@ -720,6 +720,39 @@
       .probability-history-section {
         padding: 1rem;
       }
+      .breakdown-section {
+        padding: 1rem;
+      }
+      .breakdown-section .controls-desc {
+        font-size: 0.8rem;
+        margin-bottom: 0.5rem;
+      }
+      .breakdown-list li {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.25rem 0.75rem;
+        align-items: baseline;
+        padding: 0.6rem 0;
+        font-size: 0.8rem;
+        word-break: break-word;
+      }
+      .breakdown-list .breakdown-label {
+        grid-column: 1;
+        grid-row: 1;
+      }
+      .breakdown-list .breakdown-percent {
+        grid-column: 2;
+        grid-row: 1;
+        text-align: right;
+      }
+      .breakdown-list .breakdown-value {
+        grid-column: 1 / -1;
+        font-size: 0.75rem;
+      }
+      .breakdown-list li.breakdown-sum {
+        margin-top: 0.5rem;
+        padding-top: 0.6rem;
+      }
       .card-label {
         font-size: 0.7rem;
       }
