@@ -606,19 +606,48 @@
       color: var(--text-primary);
     }
     .probability-graph {
+      position: relative;
       width: 100%;
-      height: 100px;
-      min-height: 90px;
+      height: 120px;
+      min-height: 100px;
       border-radius: 8px;
       background: var(--glass);
       border: 1px solid var(--glass-border);
       overflow: hidden;
+    }
+    .probability-graph-tooltip {
+      position: absolute;
+      pointer-events: none;
+      padding: 0.35rem 0.6rem;
+      border-radius: 6px;
+      background: var(--bg-panel);
+      border: 1px solid var(--glass-border);
+      font-size: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-primary);
+      opacity: 0;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      z-index: 10;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .probability-graph-tooltip.visible {
+      opacity: 1;
+    }
+    .probability-graph-snippet {
+      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
     }
     .probability-graph svg {
       width: 100%;
       height: 100%;
       display: block;
       vertical-align: top;
+    }
+    .probability-graph .graph-dot {
+      cursor: pointer;
     }
     .probability-graph .axis-line { stroke: var(--glass-border); stroke-width: 1; }
     .probability-graph .grid-line { stroke: var(--glass-border); stroke-width: 0.5; opacity: 0.6; }
@@ -705,7 +734,15 @@
         padding: 1rem;
       }
       .probability-graph {
-        height: 100px;
+        height: 110px;
+        min-height: 95px;
+      }
+      .probability-graph-tooltip {
+        font-size: 0.7rem;
+        padding: 0.3rem 0.5rem;
+      }
+      .probability-graph-snippet {
+        font-size: 0.7rem;
       }
       .card-label {
         font-size: 0.7rem;
@@ -822,7 +859,10 @@
 
     <section class="probability-graph-section" id="probabilityGraphSection" style="display: none;">
       <h3>Probability history</h3>
-      <div class="probability-graph" id="probabilityGraph" aria-hidden="true"></div>
+      <div class="probability-graph" id="probabilityGraph" aria-hidden="true">
+        <div class="probability-graph-tooltip" id="probabilityGraphTooltip" aria-hidden="true"></div>
+      </div>
+      <p class="probability-graph-snippet" id="probabilityGraphSnippet" aria-hidden="true"></p>
     </section>
 
     <section class="breakdown-section" id="breakdownSection" style="display: none;">
@@ -1263,17 +1303,31 @@
       if (el) el.textContent = str;
     }
 
+    function formatGraphTime(ts) {
+      var d = new Date(ts);
+      var diff = Date.now() - ts;
+      if (diff < 60000) return 'Now';
+      if (diff < 3600000) return Math.round(diff / 60000) + 'm ago';
+      if (diff < 86400000) return Math.round(diff / 3600000) + 'h ago';
+      return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+    function formatGraphTimeAxis(ts) {
+      var d = new Date(ts);
+      return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
     function renderProbabilityGraph(pts) {
       const el = document.getElementById('probabilityGraph');
+      const snippetEl = document.getElementById('probabilityGraphSnippet');
       if (!el) return;
       pts = Array.isArray(pts) ? pts : [];
       if (pts.length < 1) {
         el.innerHTML = '<p style="margin:0;padding:1rem;color:var(--text-muted);font-size:0.85rem;">Collecting data…</p>';
+        if (snippetEl) snippetEl.textContent = '';
         return;
       }
       const vbW = 340;
-      const vbH = 100;
-      const pad = { top: 8, right: 12, bottom: 20, left: 44 };
+      const vbH = 112;
+      const pad = { top: 8, right: 12, bottom: 28, left: 44 };
       const gw = vbW - pad.left - pad.right;
       const gh = vbH - pad.top - pad.bottom;
       const dataMin = Math.min(...pts.map((p) => p.ts));
@@ -1290,7 +1344,10 @@
         pts.length >= 2
           ? pts.map((p, i) => (i === 0 ? 'M' : 'L') + x(p.ts).toFixed(2) + ',' + y(p.p).toFixed(2)).join(' ')
           : 'M' + pad.left + ',' + y(lastP.p).toFixed(2) + ' L' + (pad.left + gw).toFixed(2) + ',' + y(lastP.p).toFixed(2);
-      let svg = '<svg viewBox="0 0 ' + vbW + ' ' + vbH + '" preserveAspectRatio="none" width="100%" height="100%">';
+      const timeLeft = formatGraphTimeAxis(xMin);
+      const timeMid = formatGraphTimeAxis(xMin + xRange / 2);
+      const timeRight = formatGraphTimeAxis(xMax);
+      let svg = '<svg viewBox="0 0 ' + vbW + ' ' + vbH + '" preserveAspectRatio="none" width="100%" height="100%" aria-label="Probability over time">';
       svg += '<defs><style>.axis-line{stroke:rgba(255,255,255,0.12);stroke-width:1}.grid-line{stroke:rgba(255,255,255,0.08);stroke-width:0.5}.axis-label{fill:#8b95a8;font-size:10px;font-family:JetBrains Mono,monospace}</style></defs>';
       svg += '<line class="axis-line" x1="' + pad.left + '" y1="' + pad.top + '" x2="' + pad.left + '" y2="' + (pad.top + gh) + '"/>';
       svg += '<line class="axis-line" x1="' + pad.left + '" y1="' + (pad.top + gh) + '" x2="' + (pad.left + gw) + '" y2="' + (pad.top + gh) + '"/>';
@@ -1299,15 +1356,52 @@
         if (v > 0 && v < 100) svg += '<line class="grid-line" x1="' + pad.left + '" y1="' + yy.toFixed(2) + '" x2="' + (pad.left + gw) + '" y2="' + yy.toFixed(2) + '"/>';
         svg += '<text class="axis-label" x="' + (pad.left - 6) + '" y="' + (yy + 3) + '" text-anchor="end">' + v + '%</text>';
       });
-      svg += '<text class="axis-label" x="' + pad.left + '" y="' + (vbH - 4) + '" text-anchor="start">Earlier</text>';
-      svg += '<text class="axis-label" x="' + (pad.left + gw) + '" y="' + (vbH - 4) + '" text-anchor="end">Now</text>';
+      svg += '<text class="axis-label" x="' + pad.left + '" y="' + (vbH - 6) + '" text-anchor="start">' + timeLeft + '</text>';
+      svg += '<text class="axis-label" x="' + (pad.left + gw / 2) + '" y="' + (vbH - 6) + '" text-anchor="middle">' + timeMid + '</text>';
+      svg += '<text class="axis-label" x="' + (pad.left + gw) + '" y="' + (vbH - 6) + '" text-anchor="end">' + timeRight + '</text>';
       svg += '<path class="probability-graph-line" d="' + pathD + '" style="stroke:' + lineColor + '"/>';
       pts.forEach(function (p) {
-        const dotClass = p.p >= 60 ? 'probability-graph-dot very' : p.p >= 35 ? 'probability-graph-dot high' : 'probability-graph-dot';
-        svg += '<circle class="' + dotClass + '" cx="' + x(p.ts).toFixed(2) + '" cy="' + y(p.p).toFixed(2) + '" r="4"/>';
+        const dotClass = (p.p >= 60 ? 'probability-graph-dot very' : p.p >= 35 ? 'probability-graph-dot high' : 'probability-graph-dot') + ' graph-dot';
+        const timeStr = formatGraphTime(p.ts);
+        const label = timeStr + ' · ' + Math.round(p.p) + '%';
+        svg += '<circle class="' + dotClass + '" cx="' + x(p.ts).toFixed(2) + '" cy="' + y(p.p).toFixed(2) + '" r="5" data-time="' + timeStr + '" data-p="' + Math.round(p.p) + '" data-label="' + label.replace(/"/g, '&quot;') + '" aria-label="' + label.replace(/"/g, '&quot;') + '"/>';
       });
       svg += '</svg>';
-      el.innerHTML = svg;
+      el.innerHTML = '<div class="probability-graph-tooltip" id="probabilityGraphTooltip" aria-hidden="true"></div>' + svg;
+      if (snippetEl) snippetEl.textContent = 'Latest: ' + formatGraphTime(lastP.ts) + ' · ' + Math.round(lastP.p) + '% — tap a point for time';
+      const tooltip = document.getElementById('probabilityGraphTooltip');
+      const circles = el.querySelectorAll('.graph-dot');
+      function showTooltip(label, ev) {
+        if (!tooltip) return;
+        tooltip.textContent = label;
+        tooltip.classList.add('visible');
+        const rect = el.getBoundingClientRect();
+        const xPos = (ev && (ev.clientX != null || ev.touches)) ? (ev.touches ? ev.touches[0].clientX : ev.clientX) : rect.right - 80;
+        const yPos = (ev && (ev.clientY != null || ev.touches)) ? (ev.touches ? ev.touches[0].clientY : ev.clientY) : rect.bottom - 50;
+        let left = xPos - rect.left + 8;
+        let top = yPos - rect.top - 8;
+        if (left + 120 > rect.width) left = rect.width - 120;
+        if (left < 8) left = 8;
+        if (top < 8) top = 8;
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+      }
+      function hideTooltip() {
+        if (tooltip) tooltip.classList.remove('visible');
+      }
+      circles.forEach(function (c) {
+        const label = c.getAttribute('data-label') || (c.getAttribute('data-time') + ' · ' + c.getAttribute('data-p') + '%');
+        c.addEventListener('mouseenter', function (e) { showTooltip(label, e); });
+        c.addEventListener('mouseleave', hideTooltip);
+        c.addEventListener('touchstart', function (e) {
+          e.preventDefault();
+          if (tooltip && tooltip.classList.contains('visible') && tooltip.textContent === label) hideTooltip();
+          else showTooltip(label, e);
+        }, { passive: false });
+      });
+      el.addEventListener('touchend', function (e) {
+        if (e.target && !e.target.classList.contains('graph-dot')) hideTooltip();
+      });
     }
 
     function updateUI(skipWhenUnchanged) {
