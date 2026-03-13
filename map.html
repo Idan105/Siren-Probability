@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Region map — Siren Probability</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-deep: #0a0c12;
+      --bg-panel: rgba(18, 22, 32, 0.6);
+      --glass: rgba(255, 255, 255, 0.04);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --text-primary: #e8ecf4;
+      --text-muted: #8b95a8;
+      --accent-cyan: #00d4aa;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      min-height: 100vh;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .app {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 1rem;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.4rem 0.75rem;
+      border-radius: 8px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      text-decoration: none;
+    }
+    .back-link:hover {
+      background: rgba(255,255,255,0.08);
+    }
+    .map-wrap {
+      background: var(--bg-panel);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .map-wrap svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .map-region {
+      fill: var(--glass);
+      stroke: rgba(255,255,255,0.15);
+      stroke-width: 1;
+      transition: fill 0.3s ease, filter 0.2s ease;
+      cursor: pointer;
+    }
+    .map-region:hover {
+      filter: brightness(1.15);
+    }
+    .map-legend {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .map-legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .map-legend i {
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+    }
+    .region-tooltip {
+      position: fixed;
+      padding: 0.5rem 0.75rem;
+      background: var(--bg-panel);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      font-size: 0.85rem;
+      pointer-events: none;
+      z-index: 10;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .region-tooltip.visible { opacity: 1; }
+    .region-tooltip strong { display: block; margin-bottom: 0.2rem; }
+    .region-tooltip .pct { font-family: 'JetBrains Mono', monospace; color: var(--accent-cyan); }
+    .data-status {
+      text-align: center;
+      padding: 1rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Probability by region</h1>
+      <a href="index.html" class="back-link">← Dashboard</a>
+    </header>
+    <div class="map-wrap">
+      <svg viewBox="0 0 260 520" xmlns="http://www.w3.org/2000/svg" aria-label="Map of Israel by region">
+        <!-- Schematic Israel: 7 regions (galil, north, center, jerusalem, ashkelon, south, eilat) -->
+        <path id="galil" class="map-region" d="M 95 28 L 165 28 L 155 75 L 105 75 Z" />
+        <path id="north" class="map-region" d="M 105 75 L 155 75 L 160 135 L 100 135 Z" />
+        <path id="center" class="map-region" d="M 100 135 L 160 135 L 158 200 L 102 200 Z" />
+        <path id="jerusalem" class="map-region" d="M 158 155 L 220 155 L 218 205 L 158 205 Z" />
+        <path id="ashkelon" class="map-region" d="M 65 200 L 102 200 L 102 265 L 65 265 Z" />
+        <path id="south" class="map-region" d="M 65 265 L 218 265 L 185 450 L 98 450 L 65 265 Z" />
+        <path id="eilat" class="map-region" d="M 98 450 L 185 450 L 142 512 L 98 450 Z" />
+      </svg>
+      <div class="map-legend">
+        <span><i style="background:#00d4aa"></i> Low (0–25%)</span>
+        <span><i style="background:#f59e0b"></i> Medium (25–60%)</span>
+        <span><i style="background:#ef4444"></i> High (60%+)</span>
+      </div>
+    </div>
+    <p class="data-status" id="dataStatus">Loading…</p>
+  </div>
+  <div class="region-tooltip" id="regionTooltip" aria-hidden="true"></div>
+
+  <script>
+    const OREF_JSON_DATA_PATH = 'data';
+    const REGION_IDS = ['center', 'jerusalem', 'north', 'south', 'ashkelon', 'eilat', 'galil'];
+
+    function probabilityToColor(p) {
+      if (p == null || isNaN(p)) return 'rgba(255,255,255,0.06)';
+      if (p >= 60) return '#ef4444';
+      if (p >= 35) return '#f59e0b';
+      if (p >= 15) return '#00d4aa';
+      return 'rgba(0,212,170,0.35)';
+    }
+
+    function showTooltip(text, x, y) {
+      const el = document.getElementById('regionTooltip');
+      if (!el) return;
+      el.innerHTML = text;
+      el.classList.add('visible');
+      const pad = 8;
+      el.style.left = Math.min(x + pad, window.innerWidth - el.offsetWidth - pad) + 'px';
+      el.style.top = Math.min(y + pad, window.innerHeight - el.offsetHeight - pad) + 'px';
+    }
+
+    function hideTooltip() {
+      const el = document.getElementById('regionTooltip');
+      if (el) el.classList.remove('visible');
+    }
+
+    async function fetchUiData() {
+      const base = OREF_JSON_DATA_PATH.replace(/\/$/, '');
+      try {
+        const res = await fetch(base + '/ui-data.json', { method: 'GET', cache: 'no-store' });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data && data.regions && typeof data.regions === 'object' ? data : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function applyData(regions) {
+      const statusEl = document.getElementById('dataStatus');
+      if (!regions) {
+        if (statusEl) statusEl.textContent = 'Run the local server (node server.js in local-pusher/) to see live probability on the map.';
+        REGION_IDS.forEach(function (id) {
+          const path = document.getElementById(id);
+          if (path) path.setAttribute('fill', 'rgba(255,255,255,0.06)');
+        });
+        return;
+      }
+      if (statusEl) statusEl.textContent = 'Data from local server. Hover a region for details.';
+
+      REGION_IDS.forEach(function (id) {
+        const path = document.getElementById(id);
+        if (!path) return;
+        const r = regions[id];
+        const p = r && typeof r.probability === 'number' ? r.probability : null;
+        const name = r && r.name ? r.name : id;
+        path.setAttribute('fill', probabilityToColor(p));
+        path.setAttribute('data-name', name);
+        path.setAttribute('data-p', p != null ? String(p) : '');
+      });
+
+      if (!window._mapListenersAttached) {
+        window._mapListenersAttached = true;
+        document.querySelectorAll('.map-region').forEach(function (path) {
+          path.addEventListener('mouseenter', function (e) {
+            const name = path.getAttribute('data-name') || path.id;
+            const p = path.getAttribute('data-p');
+            const text = p !== '' && p !== null
+              ? '<strong>' + name + '</strong><span class="pct">' + Number(p).toFixed(1) + '%</span>'
+              : '<strong>' + name + '</strong><span class="pct">—</span>';
+            showTooltip(text, e.clientX, e.clientY);
+          });
+          path.addEventListener('mouseleave', hideTooltip);
+          path.addEventListener('mousemove', function (e) {
+            const name = path.getAttribute('data-name') || path.id;
+            const p = path.getAttribute('data-p');
+            const text = p !== '' && p !== null
+              ? '<strong>' + name + '</strong><span class="pct">' + Number(p).toFixed(1) + '%</span>'
+              : '<strong>' + name + '</strong><span class="pct">—</span>';
+            showTooltip(text, e.clientX, e.clientY);
+          });
+        });
+      }
+    }
+
+    async function init() {
+      const data = await fetchUiData();
+      applyData(data ? data.regions : null);
+
+      setInterval(async function () {
+        const data = await fetchUiData();
+        if (data && data.regions) applyData(data.regions);
+      }, 8000);
+    }
+
+    init();
+  </script>
+</body>
+</html>
