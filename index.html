@@ -1447,11 +1447,9 @@
         const rawContrib = item.percentContrib != null ? item.percentContrib : 0;
         const percentStr = item.percentContrib != null ? `+${rawContrib.toFixed(2)}%` : '';
         const desc = item.description ? ` <span class="breakdown-value">(${item.description})</span>` : '';
-        const pctOfTotal = sumRaw > 0 && item.percentContrib != null ? ((item.percentContrib / sumRaw) * 100).toFixed(1) : null;
-        const tooltip = pctOfTotal != null ? `${pctOfTotal}% of raw sum (${sumRaw.toFixed(1)}%). Total probability (gauge): ${total.toFixed(1)}%.` : (item.description || item.label);
-        return `<li title="${tooltip.replace(/"/g, '&quot;')}"><span class="breakdown-label">${item.label}</span><span class="breakdown-value">${valueStr}</span><span class="breakdown-percent">${percentStr}</span>${desc}</li>`;
+        return `<li><span class="breakdown-label">${item.label}</span><span class="breakdown-value">${valueStr}</span><span class="breakdown-percent">${percentStr}</span>${desc}</li>`;
       }).join('');
-      el.innerHTML = rows + `<li class="breakdown-sum" title="Gauge value (smoothed). Raw sum of factors: ${sumRaw.toFixed(1)}%."><span class="breakdown-label">Total probability</span><span class="breakdown-value"></span><span class="breakdown-percent">${total.toFixed(1)}%</span></li>`;
+      el.innerHTML = rows + `<li class="breakdown-sum"><span class="breakdown-label">Total (sum of factors)</span><span class="breakdown-value"></span><span class="breakdown-percent">${sumRaw.toFixed(1)}%</span></li>`;
     }
 
     async function init() {
