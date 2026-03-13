@@ -572,20 +572,20 @@
       list-style: none;
     }
     .breakdown-list li {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 0.5rem;
+      display: grid;
+      grid-template-columns: 1fr minmax(5ch, 11ch) minmax(4ch, 6ch) minmax(0, 1fr);
+      gap: 0 1rem;
+      align-items: baseline;
       padding: 0.5rem 0;
       border-bottom: 1px solid var(--glass-border);
       font-size: 0.88rem;
       cursor: help;
     }
     .breakdown-list li:last-child { border-bottom: none; }
-    .breakdown-list .breakdown-label { color: var(--text-primary); }
-    .breakdown-list .breakdown-value { font-family: 'JetBrains Mono', monospace; color: var(--text-muted); }
-    .breakdown-list .breakdown-percent { font-family: 'JetBrains Mono', monospace; color: var(--accent-cyan); font-weight: 500; }
+    .breakdown-list .breakdown-label { color: var(--text-primary); min-width: 0; }
+    .breakdown-list .breakdown-value { font-family: 'JetBrains Mono', monospace; color: var(--text-muted); text-align: right; }
+    .breakdown-list .breakdown-percent { font-family: 'JetBrains Mono', monospace; color: var(--accent-cyan); font-weight: 500; text-align: right; }
+    .breakdown-list .breakdown-desc { font-family: 'JetBrains Mono', monospace; color: var(--text-muted); font-size: 0.82rem; min-width: 0; }
     .breakdown-list li.breakdown-sum {
       border-top: 1px solid var(--glass-border);
       margin-top: 0.25rem;
@@ -746,6 +746,10 @@
         text-align: right;
       }
       .breakdown-list .breakdown-value {
+        grid-column: 1 / -1;
+        font-size: 0.75rem;
+      }
+      .breakdown-list .breakdown-desc {
         grid-column: 1 / -1;
         font-size: 0.75rem;
       }
@@ -1533,7 +1537,7 @@
         const valueStr = item.value != null ? `${item.value} ${item.valueUnit || ''}`.trim() : '—';
         const rawContrib = item.percentContrib != null ? item.percentContrib : 0;
         const percentStr = item.percentContrib != null ? `+${rawContrib.toFixed(2)}%` : '';
-        const desc = item.description ? ` <span class="breakdown-value">(${item.description})</span>` : '';
+        const desc = item.description ? ` <span class="breakdown-desc">(${item.description})</span>` : '';
         return `<li><span class="breakdown-label">${item.label}</span><span class="breakdown-value">${valueStr}</span><span class="breakdown-percent">${percentStr}</span>${desc}</li>`;
       }).join('');
       el.innerHTML = rows + `<li class="breakdown-sum"><span class="breakdown-label">Total (sum of factors)</span><span class="breakdown-value"></span><span class="breakdown-percent">${sumRaw.toFixed(1)}%</span></li>`;
