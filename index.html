@@ -1358,17 +1358,34 @@
       function y(p) { return pad.top + gh - (p / 100) * gh; }
 
       const lastP = pts[pts.length - 1];
-      const lineColor = lastP.p >= 60 ? 'var(--accent-red)' : lastP.p >= 35 ? 'var(--accent-amber)' : 'var(--accent-cyan)';
+      var lineColorHex = lastP.p >= 60 ? '#ef4444' : lastP.p >= 35 ? '#f59e0b' : '#00d4aa';
 
-      var pathD = pts.length >= 2
-        ? pts.map(function (p, i) { return (i === 0 ? 'M' : 'L') + x(p.ts).toFixed(2) + ',' + y(p.p).toFixed(2); }).join(' ')
-        : 'M' + pad.left + ',' + y(lastP.p).toFixed(2) + ' L' + (pad.left + gw).toFixed(2) + ',' + y(lastP.p).toFixed(2);
-      var areaD = pathD + ' L' + (pad.left + gw).toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' L' + pad.left + ',' + (pad.top + gh).toFixed(2) + ' Z';
+      var pathParts = [];
+      var areaPaths = [];
+      var segStart = 0;
+      for (var i = 1; i <= pts.length; i++) {
+        var bigDrop = i < pts.length && (pts[i - 1].p - pts[i].p) > 40;
+        if (i === pts.length || bigDrop) {
+          var seg = pts.slice(segStart, i);
+          if (seg.length >= 2) {
+            var d = seg.map(function (p, j) { return (j === 0 ? 'M' : 'L') + x(p.ts).toFixed(2) + ',' + y(p.p).toFixed(2); }).join(' ');
+            pathParts.push(d);
+            areaPaths.push(d + ' L' + x(seg[seg.length - 1].ts).toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' L' + x(seg[0].ts).toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' Z');
+          } else if (seg.length === 1) {
+            var px = x(seg[0].ts);
+            var py = y(seg[0].p);
+            pathParts.push('M' + px.toFixed(2) + ',' + py.toFixed(2) + ' L' + (px + 2).toFixed(2) + ',' + py.toFixed(2));
+            areaPaths.push('M' + px.toFixed(2) + ',' + py.toFixed(2) + ' L' + (px + 2).toFixed(2) + ',' + py.toFixed(2) + ' L' + (px + 2).toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' L' + px.toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' Z');
+          }
+          segStart = i;
+        }
+      }
+      var pathD = pathParts.length ? pathParts.join(' ') : 'M' + pad.left + ',' + y(lastP.p).toFixed(2) + ' L' + (pad.left + gw).toFixed(2) + ',' + y(lastP.p).toFixed(2);
 
       var svg = '<svg viewBox="0 0 ' + vbW + ' ' + vbH + '" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" aria-label="Probability over time">';
-      svg += '<defs><linearGradient id="probAreaGrad" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="' + lineColor + '" stop-opacity="0.2"/><stop offset="100%" stop-color="' + lineColor + '" stop-opacity="0.02"/></linearGradient></defs>';
-      svg += '<path fill="url(#probAreaGrad)" d="' + areaD + '"/>';
-      svg += '<path fill="none" stroke="' + lineColor + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="' + pathD + '"/>';
+      svg += '<defs><linearGradient id="probAreaGrad" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="' + lineColorHex + '" stop-opacity="0.25"/><stop offset="100%" stop-color="' + lineColorHex + '" stop-opacity="0.02"/></linearGradient></defs>';
+      areaPaths.forEach(function (areaD) { svg += '<path fill="url(#probAreaGrad)" d="' + areaD + '"/>'; });
+      svg += '<path fill="none" stroke="' + lineColorHex + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="' + pathD + '"/>';
       [0, 25, 50, 75, 100].forEach(function (v) {
         var yy = y(v);
         if (v > 0 && v < 100) svg += '<line x1="' + pad.left + '" y1="' + yy.toFixed(2) + '" x2="' + (pad.left + gw) + '" y2="' + yy.toFixed(2) + '" stroke="var(--glass-border)" stroke-width="0.5" opacity="0.6"/>';
@@ -1378,9 +1395,9 @@
       svg += '<text x="' + (pad.left + gw / 2) + '" y="' + (vbH - 4) + '" text-anchor="middle" fill="var(--text-muted)" font-size="9" font-family="JetBrains Mono,monospace">' + formatTimeAxis(xMin + xRange / 2) + '</text>';
       svg += '<text x="' + (pad.left + gw) + '" y="' + (vbH - 4) + '" text-anchor="end" fill="var(--text-muted)" font-size="9" font-family="JetBrains Mono,monospace">' + formatTimeAxis(xMax) + '</text>';
       pts.forEach(function (p, i) {
-        var dotColor = p.p >= 60 ? 'var(--accent-red)' : p.p >= 35 ? 'var(--accent-amber)' : 'var(--accent-cyan)';
+        var dotColor = p.p >= 60 ? '#ef4444' : p.p >= 35 ? '#f59e0b' : '#00d4aa';
         var label = formatTimeAgo(p.ts) + ' · ' + Math.round(p.p) + '%';
-        svg += '<circle cx="' + x(p.ts).toFixed(2) + '" cy="' + y(p.p).toFixed(2) + '" r="' + (i === pts.length - 1 ? 4 : 2.5) + '" fill="var(--bg-panel)" stroke="' + dotColor + '" stroke-width="1.5" data-label="' + label.replace(/"/g, '&quot;') + '" aria-label="' + label.replace(/"/g, '&quot;') + '"/>';
+        svg += '<circle cx="' + x(p.ts).toFixed(2) + '" cy="' + y(p.p).toFixed(2) + '" r="' + (i === pts.length - 1 ? 4 : 2.5) + '" fill="rgba(18,22,32,0.8)" stroke="' + dotColor + '" stroke-width="1.5" data-label="' + label.replace(/"/g, '&quot;') + '" aria-label="' + label.replace(/"/g, '&quot;') + '"/>';
       });
       svg += '</svg>';
       chartEl.innerHTML = svg;
