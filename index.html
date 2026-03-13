@@ -669,6 +669,25 @@
     .probability-history-item .bar.mid { background: var(--accent-amber); }
     .probability-history-item .bar.high { background: var(--accent-red); }
 
+    .probability-history-chart-wrap {
+      margin-bottom: 0.75rem;
+      border-radius: 10px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      padding: 0.75rem;
+      overflow: hidden;
+    }
+    .probability-history-chart {
+      width: 100%;
+      height: 140px;
+      display: block;
+    }
+    .probability-history-chart svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
     footer {
       text-align: center;
       padding: 1rem;
@@ -864,6 +883,9 @@
     <section class="probability-history-section" id="probabilityHistorySection" style="display: none;">
       <h3>Recent readings</h3>
       <p class="probability-history-summary" id="probabilityHistorySummary"></p>
+      <div class="probability-history-chart-wrap" id="probabilityHistoryChartWrap">
+        <div class="probability-history-chart" id="probabilityHistoryChart" role="img" aria-label="Probability over time"></div>
+      </div>
       <ul class="probability-history-list" id="probabilityHistoryList" aria-label="Recent probability readings"></ul>
     </section>
 
@@ -1315,8 +1337,13 @@
     function pctClass(p) {
       return p >= 60 ? 'high' : p >= 35 ? 'mid' : 'low';
     }
+    function formatTimeAxis(ts) {
+      var d = new Date(ts);
+      return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
     function renderProbabilityHistory(regionData) {
       const summaryEl = document.getElementById('probabilityHistorySummary');
+      const chartEl = document.getElementById('probabilityHistoryChart');
       const listEl = document.getElementById('probabilityHistoryList');
       if (!listEl) return;
       const pts = Array.isArray(regionData.history) ? regionData.history : [];
@@ -1324,6 +1351,7 @@
 
       if (pts.length < 1) {
         if (summaryEl) summaryEl.textContent = regionName + ' · Collecting data…';
+        if (chartEl) chartEl.innerHTML = '<p style="margin:0;padding:1rem;color:var(--text-muted);font-size:0.85rem;">Collecting data…</p>';
         listEl.innerHTML = '';
         return;
       }
@@ -1333,6 +1361,61 @@
       var lastP = pts[pts.length - 1].p;
       if (summaryEl) {
         summaryEl.textContent = regionName + ' · Peak ' + Math.round(maxP) + '% · Low ' + Math.round(minP) + '% · Now ' + Math.round(lastP) + '%';
+      }
+
+      var maxWindowMs = 4 * 60 * 60 * 1000;
+      var dataMax = Math.max.apply(null, pts.map(function (p) { return p.ts; }));
+      var xMin = dataMax - maxWindowMs;
+      var xMax = dataMax;
+      var xRange = xMax - xMin || 1;
+      var vbW = 320;
+      var vbH = 120;
+      var pad = { top: 10, right: 14, bottom: 22, left: 40 };
+      var gw = vbW - pad.left - pad.right;
+      var gh = vbH - pad.top - pad.bottom;
+      function x(ts) { return pad.left + ((ts - xMin) / xRange) * gw; }
+      function y(p) { return pad.top + gh - (p / 100) * gh; }
+
+      var inWindow = pts.filter(function (p) { return p.ts >= xMin && p.ts <= xMax; });
+      var lineColorHex = lastP >= 60 ? '#ef4444' : lastP >= 35 ? '#f59e0b' : '#00d4aa';
+      if (chartEl) {
+        if (inWindow.length < 2) {
+          chartEl.innerHTML = '<p style="margin:0;padding:0.5rem;color:var(--text-muted);font-size:0.8rem;">Not enough points in window yet.</p>';
+        } else {
+          var pathParts = [];
+          var areaPaths = [];
+          var segStart = 0;
+          for (var i = 1; i <= inWindow.length; i++) {
+            var bigDrop = i < inWindow.length && (inWindow[i - 1].p - inWindow[i].p) > 40;
+            if (i === inWindow.length || bigDrop) {
+              var seg = inWindow.slice(segStart, i);
+              if (seg.length >= 2) {
+                var d = seg.map(function (p, j) { return (j === 0 ? 'M' : 'L') + x(p.ts).toFixed(2) + ',' + y(p.p).toFixed(2); }).join(' ');
+                pathParts.push(d);
+                areaPaths.push(d + ' L' + x(seg[seg.length - 1].ts).toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' L' + x(seg[0].ts).toFixed(2) + ',' + (pad.top + gh).toFixed(2) + ' Z');
+              }
+              segStart = i;
+            }
+          }
+          var pathD = pathParts.join(' ');
+          var svg = '<svg viewBox="0 0 ' + vbW + ' ' + vbH + '" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" aria-label="Probability over time">';
+          svg += '<defs><linearGradient id="probAreaGrad" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="' + lineColorHex + '" stop-opacity="0.2"/><stop offset="100%" stop-color="' + lineColorHex + '" stop-opacity="0.02"/></linearGradient></defs>';
+          areaPaths.forEach(function (areaD) { svg += '<path fill="url(#probAreaGrad)" d="' + areaD + '"/>'; });
+          svg += '<path fill="none" stroke="' + lineColorHex + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="' + pathD + '"/>';
+          [0, 25, 50, 75, 100].forEach(function (v) {
+            var yy = y(v);
+            if (v > 0 && v < 100) svg += '<line x1="' + pad.left + '" y1="' + yy.toFixed(2) + '" x2="' + (pad.left + gw) + '" y2="' + yy.toFixed(2) + '" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>';
+            svg += '<text x="' + (pad.left - 6) + '" y="' + (yy + 3) + '" text-anchor="end" fill="#8b95a8" font-size="9" font-family="JetBrains Mono,monospace">' + v + '%</text>';
+          });
+          svg += '<text x="' + pad.left + '" y="' + (vbH - 4) + '" text-anchor="start" fill="#8b95a8" font-size="9" font-family="JetBrains Mono,monospace">' + formatTimeAxis(xMin) + '</text>';
+          svg += '<text x="' + (pad.left + gw) + '" y="' + (vbH - 4) + '" text-anchor="end" fill="#8b95a8" font-size="9" font-family="JetBrains Mono,monospace">' + formatTimeAxis(xMax) + '</text>';
+          inWindow.forEach(function (p, i) {
+            var dotColor = p.p >= 60 ? '#ef4444' : p.p >= 35 ? '#f59e0b' : '#00d4aa';
+            svg += '<circle cx="' + x(p.ts).toFixed(2) + '" cy="' + y(p.p).toFixed(2) + '" r="' + (i === inWindow.length - 1 ? 3.5 : 2) + '" fill="rgba(18,22,32,0.9)" stroke="' + dotColor + '" stroke-width="1.5"/>';
+          });
+          svg += '</svg>';
+          chartEl.innerHTML = svg;
+        }
       }
 
       var recent = pts.slice(-16);
