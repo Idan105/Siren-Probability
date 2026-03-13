@@ -1276,9 +1276,12 @@
       const pad = { top: 8, right: 12, bottom: 20, left: 44 };
       const gw = vbW - pad.left - pad.right;
       const gh = vbH - pad.top - pad.bottom;
-      const xMin = Math.min(...pts.map((p) => p.ts));
-      const xMax = Math.max(...pts.map((p) => p.ts));
-      const xRange = xMax - xMin || 1;
+      const dataMin = Math.min(...pts.map((p) => p.ts));
+      const dataMax = Math.max(...pts.map((p) => p.ts));
+      const minWindowMs = 6 * 60 * 60 * 1000;
+      const xRange = Math.max(dataMax - dataMin || 1, minWindowMs);
+      const xMax = dataMax;
+      const xMin = xMax - xRange;
       const x = (ts) => pad.left + ((ts - xMin) / xRange) * gw;
       const y = (p) => pad.top + gh - (p / 100) * gh;
       const lastP = pts[pts.length - 1];
