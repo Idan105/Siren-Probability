@@ -88,6 +88,23 @@
       letter-spacing: 0.05em;
     }
 
+    .region-top-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .region-top-label {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+    .region-top-bar .region-select {
+      min-width: 200px;
+      max-width: 280px;
+    }
+
     /* Main hero — gauge section */
     .hero {
       display: flex;
@@ -590,7 +607,7 @@
     }
     .probability-graph {
       width: 100%;
-      height: 120px;
+      height: 140px;
       border-radius: 8px;
       background: var(--glass);
       border: 1px solid var(--glass-border);
@@ -600,6 +617,9 @@
       height: 100%;
       display: block;
     }
+    .probability-graph .axis-line { stroke: var(--glass-border); stroke-width: 1; }
+    .probability-graph .grid-line { stroke: var(--glass-border); stroke-width: 0.5; opacity: 0.6; }
+    .probability-graph .axis-label { fill: var(--text-muted); font-size: 10px; font-family: 'JetBrains Mono', monospace; }
     .probability-graph-line {
       fill: none;
       stroke: var(--accent-cyan);
@@ -616,14 +636,6 @@
     }
     .probability-graph-dot.high { stroke: var(--accent-amber); }
     .probability-graph-dot.very { stroke: var(--accent-red); }
-    .probability-graph-labels {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 0.35rem;
-      font-size: 0.7rem;
-      color: var(--text-muted);
-      font-family: 'JetBrains Mono', monospace;
-    }
 
     footer {
       text-align: center;
@@ -757,6 +769,16 @@
       <h1>Siren Probability Dashboard</h1>
     </header>
 
+    <div class="region-top-bar">
+      <span class="region-top-label">Region</span>
+      <div class="region-select" id="regionSelect">
+        <button type="button" class="region-select-trigger" id="regionSelectTrigger" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="regionSelectLabel">
+          <span id="regionSelectLabel">—</span>
+        </button>
+        <div class="region-select-panel" id="regionSelectPanel" role="listbox" aria-label="Region"></div>
+      </div>
+    </div>
+
     <section class="hero">
       <div class="gauge-wrapper">
         <div class="gauge-ring" id="gaugeRing"></div>
@@ -790,10 +812,6 @@
         <div class="card-value" id="cardTimeSince">—</div>
       </div>
       <div class="card">
-        <div class="card-label">Data source</div>
-        <div class="card-value" id="cardDataSource">—</div>
-      </div>
-      <div class="card">
         <div class="card-label">Last update</div>
         <div class="card-value" id="cardUpdated">—</div>
       </div>
@@ -802,26 +820,6 @@
     <section class="probability-graph-section" id="probabilityGraphSection" style="display: none;">
       <h3>Probability history</h3>
       <div class="probability-graph" id="probabilityGraph" aria-hidden="true"></div>
-      <div class="probability-graph-labels">
-        <span id="graphLabelLeft">Earlier</span>
-        <span id="graphLabelRight">Now</span>
-      </div>
-    </section>
-
-    <section class="controls">
-      <h3>Region</h3>
-      <p class="controls-desc">Probability is computed per area. Select a region to see its estimate.</p>
-      <div class="controls-grid">
-        <div class="control-group">
-          <label>Area</label>
-          <div class="region-select" id="regionSelect">
-            <button type="button" class="region-select-trigger" id="regionSelectTrigger" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="regionSelectLabel">
-              <span id="regionSelectLabel">—</span>
-            </button>
-            <div class="region-select-panel" id="regionSelectPanel" role="listbox" aria-label="Region"></div>
-          </div>
-        </div>
-      </div>
     </section>
 
     <section class="breakdown-section" id="breakdownSection" style="display: none;">
@@ -1270,14 +1268,14 @@
         el.innerHTML = '<p style="margin:0;padding:1rem;color:var(--text-muted);font-size:0.85rem;">Collecting data…</p>';
         return;
       }
-      const vbW = 300;
-      const vbH = 120;
-      const pad = { top: 12, right: 12, bottom: 12, left: 12 };
+      const vbW = 340;
+      const vbH = 140;
+      const pad = { top: 10, right: 12, bottom: 24, left: 44 };
+      const gw = vbW - pad.left - pad.right;
+      const gh = vbH - pad.top - pad.bottom;
       const xMin = Math.min(...pts.map((p) => p.ts));
       const xMax = Math.max(...pts.map((p) => p.ts));
       const xRange = xMax - xMin || 1;
-      const gw = vbW - pad.left - pad.right;
-      const gh = vbH - pad.top - pad.bottom;
       const x = (ts) => pad.left + ((ts - xMin) / xRange) * gw;
       const y = (p) => pad.top + gh - (p / 100) * gh;
       const lastP = pts[pts.length - 1];
@@ -1286,16 +1284,18 @@
         pts.length >= 2
           ? pts.map((p, i) => (i === 0 ? 'M' : 'L') + x(p.ts).toFixed(2) + ',' + y(p.p).toFixed(2)).join(' ')
           : 'M' + pad.left + ',' + y(lastP.p).toFixed(2) + ' L' + (pad.left + gw).toFixed(2) + ',' + y(lastP.p).toFixed(2);
-      let svg =
-        '<svg viewBox="0 0 ' +
-        vbW +
-        ' ' +
-        vbH +
-        '" preserveAspectRatio="xMidYMid meet"><path class="probability-graph-line" d="' +
-        pathD +
-        '" style="stroke:' +
-        lineColor +
-        '"/>';
+      let svg = '<svg viewBox="0 0 ' + vbW + ' ' + vbH + '" preserveAspectRatio="xMidYMid meet">';
+      svg += '<defs><style>.axis-line{stroke:rgba(255,255,255,0.12);stroke-width:1}.grid-line{stroke:rgba(255,255,255,0.08);stroke-width:0.5}.axis-label{fill:#8b95a8;font-size:10px;font-family:JetBrains Mono,monospace}</style></defs>';
+      svg += '<line class="axis-line" x1="' + pad.left + '" y1="' + pad.top + '" x2="' + pad.left + '" y2="' + (pad.top + gh) + '"/>';
+      svg += '<line class="axis-line" x1="' + pad.left + '" y1="' + (pad.top + gh) + '" x2="' + (pad.left + gw) + '" y2="' + (pad.top + gh) + '"/>';
+      [0, 25, 50, 75, 100].forEach(function (v) {
+        const yy = y(v);
+        if (v > 0 && v < 100) svg += '<line class="grid-line" x1="' + pad.left + '" y1="' + yy.toFixed(2) + '" x2="' + (pad.left + gw) + '" y2="' + yy.toFixed(2) + '"/>';
+        svg += '<text class="axis-label" x="' + (pad.left - 6) + '" y="' + (yy + 3) + '" text-anchor="end">' + v + '%</text>';
+      });
+      svg += '<text class="axis-label" x="' + pad.left + '" y="' + (vbH - 4) + '" text-anchor="start">Earlier</text>';
+      svg += '<text class="axis-label" x="' + (pad.left + gw) + '" y="' + (vbH - 4) + '" text-anchor="end">Now</text>';
+      svg += '<path class="probability-graph-line" d="' + pathD + '" style="stroke:' + lineColor + '"/>';
       pts.forEach(function (p) {
         const dotClass = p.p >= 60 ? 'probability-graph-dot very' : p.p >= 35 ? 'probability-graph-dot high' : 'probability-graph-dot';
         svg += '<circle class="' + dotClass + '" cx="' + x(p.ts).toFixed(2) + '" cy="' + y(p.p).toFixed(2) + '" r="5"/>';
@@ -1369,8 +1369,6 @@
 
       const timeSinceStr = (minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren) < 60 ? `${(minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren)} min ago` : `${((minutesSinceLastSiren != null ? minutesSinceLastSiren : state.minutesSinceLastSiren) / 60).toFixed(1)} h ago`;
       setIfChanged('cardTimeSince', timeSinceStr, String);
-      const dataSourceStr = useServerProbability ? 'Local server' : (dataSource === 'api' ? 'Live (Pikud HaOref)' : 'Start the local server');
-      setIfChanged('cardDataSource', dataSourceStr, String);
       const updatedStr = useServerProbability && serverUiData && serverUiData.timestamp ? new Date(serverUiData.timestamp).toLocaleTimeString() : (lastDataFetchTime ? new Date(lastDataFetchTime).toLocaleTimeString() : '—');
       setIfChanged('cardUpdated', updatedStr, String);
 
@@ -1446,14 +1444,14 @@
       const sumRaw = breakdown.reduce((s, item) => s + (item.percentContrib != null ? item.percentContrib : 0), 0);
       const rows = breakdown.map((item) => {
         const valueStr = item.value != null ? `${item.value} ${item.valueUnit || ''}`.trim() : '—';
-        const shareOfTotal = sumRaw > 0 && item.percentContrib != null ? (item.percentContrib / sumRaw) * total : (item.percentContrib != null ? item.percentContrib : 0);
-        const percentStr = item.percentContrib != null ? `+${shareOfTotal.toFixed(2)}%` : '';
+        const rawContrib = item.percentContrib != null ? item.percentContrib : 0;
+        const percentStr = item.percentContrib != null ? `+${rawContrib.toFixed(2)}%` : '';
         const desc = item.description ? ` <span class="breakdown-value">(${item.description})</span>` : '';
         const pctOfTotal = sumRaw > 0 && item.percentContrib != null ? ((item.percentContrib / sumRaw) * 100).toFixed(1) : null;
-        const tooltip = pctOfTotal != null ? `${pctOfTotal}% of total probability (${total.toFixed(1)}%).` : (item.description || item.label);
+        const tooltip = pctOfTotal != null ? `${pctOfTotal}% of raw sum (${sumRaw.toFixed(1)}%). Total probability (gauge): ${total.toFixed(1)}%.` : (item.description || item.label);
         return `<li title="${tooltip.replace(/"/g, '&quot;')}"><span class="breakdown-label">${item.label}</span><span class="breakdown-value">${valueStr}</span><span class="breakdown-percent">${percentStr}</span>${desc}</li>`;
       }).join('');
-      el.innerHTML = rows + `<li class="breakdown-sum" title="Sum equals total probability (gauge)."><span class="breakdown-label">Total probability</span><span class="breakdown-value"></span><span class="breakdown-percent">${total.toFixed(1)}%</span></li>`;
+      el.innerHTML = rows + `<li class="breakdown-sum" title="Gauge value (smoothed). Raw sum of factors: ${sumRaw.toFixed(1)}%."><span class="breakdown-label">Total probability</span><span class="breakdown-value"></span><span class="breakdown-percent">${total.toFixed(1)}%</span></li>`;
     }
 
     async function init() {
