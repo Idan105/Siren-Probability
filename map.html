@@ -3,10 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Region map — Siren Probability</title>
+  <title>Map — Siren Probability</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet" crossorigin="">
   <style>
     :root {
       --bg-deep: #0a0c12;
@@ -32,7 +33,8 @@
       margin-bottom: 1rem;
     }
     header h1 { font-size: 1.25rem; font-weight: 600; color: var(--text-muted); }
-    .header-dash-link {
+    .header-links { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .header-dash-link, .header-map-link {
       display: inline-flex;
       align-items: center;
       gap: 0.35rem;
@@ -46,42 +48,20 @@
       text-decoration: none;
       transition: background 0.2s, border-color 0.2s;
     }
-    .header-dash-link:hover {
+    .header-dash-link:hover, .header-map-link:hover {
       background: rgba(255,255,255,0.08);
       border-color: rgba(255,255,255,0.12);
     }
+    .header-map-link { border-color: rgba(0, 212, 170, 0.3); }
     .map-wrap {
-      max-width: 420px;
+      max-width: 640px;
       margin: 0 auto;
       background: var(--glass);
       border: 1px solid var(--glass-border);
       border-radius: 12px;
-      padding: 1rem;
+      overflow: hidden;
     }
-    .map-wrap svg {
-      width: 100%;
-      height: auto;
-      display: block;
-    }
-    .map-wrap path {
-      cursor: default;
-      transition: fill 0.3s ease, filter 0.2s ease;
-    }
-    .map-wrap path:hover {
-      filter: brightness(1.15);
-    }
-    .map-prob-circle {
-      cursor: default;
-    }
-    .map-prob-circle text {
-      font-family: 'Outfit', 'JetBrains Mono', sans-serif;
-      font-size: 22px;
-      font-weight: 600;
-      fill: var(--text-primary);
-      text-anchor: middle;
-      dominant-baseline: central;
-      pointer-events: none;
-    }
+    #map { width: 100%; height: 420px; display: block; }
     .map-legend {
       display: flex;
       align-items: center;
@@ -93,59 +73,133 @@
       color: var(--text-muted);
     }
     .map-legend span { display: flex; align-items: center; gap: 0.35rem; }
-    .map-legend i {
-      width: 12px;
-      height: 12px;
-      border-radius: 3px;
-    }
+    .map-legend i { width: 12px; height: 12px; border-radius: 3px; }
     .map-status {
       text-align: center;
       font-size: 0.9rem;
       color: var(--text-muted);
       margin-top: 0.5rem;
     }
+    .leaflet-control-attribution a { color: var(--text-muted) !important; }
+    .prob-circle-wrap { background: none !important; border: none !important; }
+    .prob-circle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(10, 12, 18, 0.92);
+      border: 2px solid #6b9a76;
+      color: var(--text-primary);
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
   <header>
     <h1>Siren Probability — Map</h1>
-    <a href="index.html" class="header-dash-link" aria-label="Back to dashboard">Dashboard</a>
+    <div class="header-links">
+      <a href="index.html" class="header-dash-link">Dashboard</a>
+    </div>
   </header>
-  <div class="map-wrap" id="mapWrap">
-    <div class="map-status" id="mapStatus">Loading map…</div>
+  <div class="map-wrap">
+    <div id="map"></div>
   </div>
-  <div class="map-legend" id="mapLegend" aria-hidden="true">
+  <div class="map-legend" id="mapLegend">
     <span><i style="background:#00d4aa;"></i> Low</span>
     <span><i style="background:#f59e0b;"></i> Medium</span>
     <span><i style="background:#ef4444;"></i> High</span>
   </div>
+  <div class="map-status" id="mapStatus">Loading…</div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://unpkg.com/d3-delaunay@6.0.2/dist/d3-delaunay.min.js" crossorigin=""></script>
+  <script src="https://unpkg.com/polygon-clipping@0.15.6/dist/polygon-clipping.umd.js" crossorigin=""></script>
   <script>
     (function () {
       const OREF_JSON_DATA_PATH = 'data';
-      // SVG path id → app region id (for ui-data.json regions)
-      const SVG_TO_REGION = {
-        'ILD': 'south',      // HaDarom
-        'ILZ': 'galil',      // HaZafon
-        'ILHA': 'north',     // Haifa
-        'ILM': 'center',     // HaMerkaz
-        'ILJM': 'jerusalem', // Jerusalem
-        'ILTA': 'center'     // Tel Aviv (same as center)
-      };
-      // Label positions in SVG viewBox (0 0 1000 1000) for probability circles
-      const LABEL_POSITIONS = {
-        'ILD': [457.1, 635.7],
-        'ILZ': [580.7, 174.1],
-        'ILHA': [491.9, 204.2],
-        'ILM': [450.5, 400.3],
-        'ILJM': [493.5, 434.3],
-        'ILTA': [447.7, 362.2]
-      };
-      const DEFAULT_FILL = 'rgba(111, 156, 118, 0.5)'; // subtle green when no data
-      const PROB_CIRCLE_R = 32;
+      let regionsLayer = null;
+      let circlesLayer = null;
+
+      // Same 7 regions as main page and server (alarm assignment = nearest region center)
+      const REGIONS = [
+        { id: 'center', name: 'Center (Gush Dan)', lat: 32.0853, lon: 34.7818 },
+        { id: 'jerusalem', name: 'Jerusalem', lat: 31.7683, lon: 35.2137 },
+        { id: 'north', name: 'North (Haifa area)', lat: 32.794, lon: 34.9896 },
+        { id: 'south', name: 'South (Negev)', lat: 31.2518, lon: 34.7913 },
+        { id: 'ashkelon', name: 'Ashkelon area', lat: 31.6697, lon: 34.5716 },
+        { id: 'eilat', name: 'Eilat', lat: 29.5577, lon: 34.9519 },
+        { id: 'galil', name: 'North East (Galil)', lat: 32.7957, lon: 35.531 }
+      ];
+
+      // Projection: equal-distance space at Israel's latitude so Voronoi "nearest" is accurate.
+      var CENTER_LAT_RAD = (32 * Math.PI) / 180;
+      var COS_LAT = Math.cos(CENTER_LAT_RAD);
+      function projectLonLat(lon, lat) { return [lon * COS_LAT, lat]; }
+      function unprojectXY(x, y) { return [x / COS_LAT, y]; }
+
+      // Voronoi cells in projected space, optionally clipped to Israel (districts). Uses polygon-clipping lib.
+      function voronoiGeoJSON(districtsFC) {
+        var DelaunayLib = (typeof d3 !== 'undefined' && d3.Delaunay) ? d3.Delaunay : (typeof Delaunay !== 'undefined' ? Delaunay : null);
+        if (!DelaunayLib) throw new Error('Delaunay not loaded');
+        var clip = (typeof polygonClipping !== 'undefined' && polygonClipping && polygonClipping.intersection) || null;
+        var districts = (districtsFC && districtsFC.features) || [];
+        var b = [34.2, 29.4, 35.9, 33.4];
+        var points = REGIONS.map(function (r) { return projectLonLat(r.lon, r.lat); });
+        var boundsProj = [
+          projectLonLat(b[0], b[1])[0], projectLonLat(b[0], b[1])[1],
+          projectLonLat(b[2], b[3])[0], projectLonLat(b[2], b[3])[1]
+        ];
+        var delaunay = DelaunayLib.from(points);
+        var voronoi = delaunay.voronoi(boundsProj);
+        var out = [];
+        for (var i = 0; i < REGIONS.length; i++) {
+          var poly = voronoi.cellPolygon(i);
+          var ring = Array.from(poly || [], function (p) { return unprojectXY(p[0], p[1]); });
+          if (ring.length < 3) continue;
+          if (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1]) ring.push([ring[0][0], ring[0][1]]);
+          var cellPoly = [ring];
+          var added = false;
+          if (clip && districts.length > 0) {
+            for (var d = 0; d < districts.length; d++) {
+              var geom = districts[d].geometry;
+              if (!geom || !geom.coordinates) continue;
+              var districtPoly = geom.type === 'Polygon' ? geom.coordinates : (geom.type === 'MultiPolygon' ? geom.coordinates[0] : null);
+              if (!districtPoly) continue;
+              try {
+                var result = clip(cellPoly, districtPoly);
+                if (!result || result.length === 0) continue;
+                for (var r = 0; r < result.length; r++) {
+                  var coords = result[r];
+                  if (coords && coords[0] && coords[0].length >= 3) {
+                    out.push({
+                      type: 'Feature',
+                      properties: { region_id: REGIONS[i].id, name: REGIONS[i].name },
+                      geometry: { type: 'Polygon', coordinates: coords }
+                    });
+                    added = true;
+                  }
+                }
+              } catch (e) { /* skip */ }
+            }
+          }
+          if (!added) {
+            out.push({
+              type: 'Feature',
+              properties: { region_id: REGIONS[i].id, name: REGIONS[i].name },
+              geometry: { type: 'Polygon', coordinates: [ring] }
+            });
+          }
+        }
+        return { type: 'FeatureCollection', features: out };
+      }
 
       function probabilityToColor(p) {
-        if (p == null || isNaN(p)) return DEFAULT_FILL;
+        if (p == null || isNaN(p)) return '#6b9a76';
         p = Math.max(0, Math.min(100, p));
         if (p <= 33) {
           const t = p / 33;
@@ -155,91 +209,52 @@
           const t = (p - 33) / 33;
           return 'rgb(' + Math.round(245 + t * (239 - 245)) + ',' + Math.round(158 + t * (68 - 158)) + ',' + Math.round(11 + t * (68 - 11)) + ')';
         }
-        const t = (p - 66) / 34;
-        return 'rgb(239,' + Math.round(68 + t * (68 - 68)) + ',' + Math.round(68 + t * (68 - 68)) + ')';
+        return 'rgb(239, 68, 68)';
       }
 
-      function ensureProbCirclesGroup(svgEl) {
-        let g = svgEl.querySelector('#prob-circles');
-        if (!g) {
-          g = svgEl.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'g');
-          g.id = 'prob-circles';
-          svgEl.appendChild(g);
-        }
-        return g;
+      function getFillColor(regions, regionId) {
+        const d = regions && regions[regionId];
+        const p = d && typeof d.probability === 'number' ? d.probability : null;
+        return probabilityToColor(p);
       }
 
-      function updateProbCircles(svgEl, regions) {
-        const group = ensureProbCirclesGroup(svgEl);
-        const pathIds = Object.keys(SVG_TO_REGION);
-        pathIds.forEach(function (pathId) {
-          const regionId = SVG_TO_REGION[pathId];
-          const data = regions && regions[regionId];
-          const p = data && typeof data.probability === 'number' ? data.probability : null;
-          const fillColor = probabilityToColor(p);
-          const pos = LABEL_POSITIONS[pathId];
-          if (!pos) return;
-          let g = group.querySelector('[data-path-id="' + pathId + '"]');
-          if (!g) {
-            g = svgEl.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'g');
-            g.setAttribute('data-path-id', pathId);
-            g.setAttribute('class', 'map-prob-circle');
-            const circle = svgEl.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circle.setAttribute('r', PROB_CIRCLE_R);
-            circle.setAttribute('cx', pos[0]);
-            circle.setAttribute('cy', pos[1]);
-            const text = svgEl.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', pos[0]);
-            text.setAttribute('y', pos[1]);
-            g.appendChild(circle);
-            g.appendChild(text);
-            group.appendChild(g);
-          }
-          const circle = g.querySelector('circle');
-          const textEl = g.querySelector('text');
-          if (circle) {
-            circle.setAttribute('fill', 'rgba(18, 22, 32, 0.92)');
-            circle.setAttribute('stroke', fillColor);
-            circle.setAttribute('stroke-width', '2');
-          }
-          if (textEl) {
-            textEl.textContent = p != null && !isNaN(p) ? Math.round(p) + '%' : '—';
-          }
-        });
-      }
-
-      function applyUiData(svgEl, regions) {
-        if (!svgEl) return;
-        const doc = svgEl.ownerDocument || document;
-        const pathIds = Object.keys(SVG_TO_REGION);
-        pathIds.forEach(function (pathId) {
-          const path = doc.getElementById(pathId);
-          if (!path) return;
-          const regionId = SVG_TO_REGION[pathId];
-          const data = regions && regions[regionId];
-          const p = data && typeof data.probability === 'number' ? data.probability : null;
-          path.style.fill = probabilityToColor(p);
-        });
-        updateProbCircles(svgEl, regions);
-      }
-
-      function loadSvg() {
-        return fetch('img/il.svg', { cache: 'no-store' })
-          .then(function (r) { return r.text(); })
-          .then(function (text) {
-            const wrap = document.getElementById('mapWrap');
-            const status = document.getElementById('mapStatus');
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(text, 'image/svg+xml');
-            const svg = doc.documentElement;
-            if (svg && svg.tagName && svg.tagName.toUpperCase() === 'SVG') {
-              wrap.insertBefore(svg, status);
-              status.style.display = 'none';
-              document.getElementById('mapLegend').setAttribute('aria-hidden', 'false');
-              return wrap.querySelector('svg');
-            }
-            throw new Error('Invalid SVG');
+      function updateRegionStyles(regions) {
+        if (!regionsLayer) return;
+        regionsLayer.eachLayer(function (layer) {
+          const rid = layer.feature && layer.feature.properties && layer.feature.properties.region_id;
+          if (!rid) return;
+          layer.setStyle({
+            fillColor: getFillColor(regions, rid),
+            color: '#e8ecf4',
+            weight: 1.5,
+            fillOpacity: 0.6
           });
+        });
+      }
+
+      function createCircleIcon(regions, regionId) {
+        const p = regions && regions[regionId] && typeof regions[regionId].probability === 'number'
+          ? regions[regionId].probability
+          : null;
+        const label = p != null && !isNaN(p) ? Math.round(p) + '%' : '—';
+        const borderColor = probabilityToColor(p);
+        return L.divIcon({
+          className: 'prob-circle-wrap',
+          html: '<div class="prob-circle" style="border-color:' + borderColor + '">' + label + '</div>',
+          iconSize: [36, 36],
+          iconAnchor: [18, 18]
+        });
+      }
+
+      function updateProbabilityCircles(map, regions) {
+        if (!circlesLayer) return;
+        circlesLayer.clearLayers();
+        REGIONS.forEach(function (r) {
+          const marker = L.marker([r.lat, r.lon], {
+            icon: createCircleIcon(regions, r.id)
+          });
+          circlesLayer.addLayer(marker);
+        });
       }
 
       function fetchUiData() {
@@ -250,30 +265,51 @@
       }
 
       function run() {
-        const wrap = document.getElementById('mapWrap');
         const statusEl = document.getElementById('mapStatus');
-        loadSvg()
-          .then(function (svgEl) {
-            if (!svgEl) return;
+        Promise.all([
+          fetchUiData(),
+          fetch('data/israel-districts.geojson').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+        ]).then(function (results) {
+          const uiData = results[0];
+          const districtsFC = results[1];
+          const regions = uiData && uiData.regions && typeof uiData.regions === 'object' ? uiData.regions : null;
+          const geojson = voronoiGeoJSON(districtsFC);
+
+          const map = L.map('map').setView([31.5, 35.0], 7);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          }).addTo(map);
+
+          function styleForRegion(feature) {
+            const rid = feature.properties && feature.properties.region_id;
+            return {
+              fillColor: getFillColor(regions, rid),
+              color: '#e8ecf4',
+              weight: 1.5,
+              fillOpacity: 0.6
+            };
+          }
+
+          regionsLayer = L.geoJSON(geojson, {
+            style: styleForRegion
+          }).addTo(map);
+
+          circlesLayer = L.layerGroup().addTo(map);
+          updateProbabilityCircles(map, regions);
+
+          updateRegionStyles(regions);
+          statusEl.textContent = regions ? 'Live probability by region.' : 'Run the local server to see live probability.';
+
+          setInterval(function () {
             fetchUiData().then(function (data) {
-              const regions = data && data.regions && typeof data.regions === 'object' ? data.regions : null;
-              applyUiData(svgEl, regions);
-              if (!regions) {
-                if (statusEl) statusEl.textContent = 'Run the local server to see live probability on the map.';
-                statusEl.style.display = 'block';
-              }
+              const r = data && data.regions ? data.regions : null;
+              updateRegionStyles(r);
+              updateProbabilityCircles(map, r);
             });
-            // Poll for updates when server is used
-            setInterval(function () {
-              fetchUiData().then(function (data) {
-                const regions = data && data.regions ? data.regions : null;
-                applyUiData(svgEl, regions);
-              });
-            }, 5000);
-          })
-          .catch(function () {
-            if (statusEl) statusEl.textContent = 'Could not load map.';
-          });
+          }, 5000);
+        }).catch(function (err) {
+          statusEl.textContent = 'Could not load map or data: ' + (err && err.message ? err.message : 'unknown error');
+        });
       }
 
       if (document.readyState === 'loading') {
