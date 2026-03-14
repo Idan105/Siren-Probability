@@ -919,7 +919,7 @@
     <section class="explanation">
       <h3>How this estimate works</h3>
       <p>
-        The probability uses <strong>historical data</strong>: we compute the average time between consecutive sirens at each place, then see how the current &quot;time since last siren&quot; compares. <strong>Under</strong> the average gap → higher probability; <strong>over</strong> → lower. We also add time-of-day progression, distance from the last siren to your location, and a clustering bonus for multiple recent alerts. Result is smoothed and clamped between 0.5% and 99.4%.
+        The probability uses <strong>historical data</strong> per region: (1) <strong>time since last siren</strong> in the region, (2) how that compares to the region’s <strong>average gap</strong> between sirens, (3) <strong>day of the week</strong> (busier or quieter days), and (4) <strong>time of day</strong> (all 24 hours—least likely hours add less, most likely add more). With the local server, the breakdown above shows each factor’s contribution. Result is smoothed and clamped between 0.5% and 99.4%.
       </p>
     </section>
 
@@ -1311,9 +1311,10 @@
 
     function getMainDriver(factors) {
       const arr = [
-        { name: 'Time of day (region pattern)', v: factors.day != null ? factors.day : 0 },
         { name: 'Time since last alarm (region)', v: factors.timeSince != null ? factors.timeSince : 0 },
         { name: 'Average time between alarms', v: factors.gap != null ? factors.gap : 0 },
+        { name: 'Day of week (region pattern)', v: factors.dayOfWeek != null ? factors.dayOfWeek : 0 },
+        { name: 'Time of day (region pattern)', v: factors.day != null ? factors.day : 0 },
       ];
       arr.sort((a, b) => b.v - a.v);
       return arr[0].v > 0 ? arr[0].name : 'Time of day (region pattern)';
