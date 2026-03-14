@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6705054810719647" crossorigin="anonymous"></script>
   <style>
     :root {
       --bg-deep: #0a0c12;
@@ -93,18 +94,65 @@
     .doc .footer-links { margin-top: 1rem; }
     .doc .footer-links a { color: var(--accent-cyan); text-decoration: none; }
     .doc .footer-links a:hover { text-decoration: underline; }
+    .page-layout {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 1rem;
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+    .main-content { flex: 0 1 auto; min-width: 0; }
+    .ad-slot-left, .ad-slot-right {
+      flex: 0 0 auto;
+      width: 160px;
+      min-height: 600px;
+    }
+    .ad-slot-left .adsbygoogle, .ad-slot-right .adsbygoogle {
+      display: block;
+      min-height: 600px;
+    }
+    .ad-slot-mobile {
+      display: none;
+      margin: 0.75rem 0;
+      min-height: 100px;
+    }
+    .ad-slot-mobile .adsbygoogle { display: block; }
+    @media (max-width: 1023px) {
+      .ad-slot-left, .ad-slot-right { display: none; }
+      .ad-slot-mobile { display: block; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Siren Probability</h1>
-    <div class="header-links">
-      <a href="index.html" class="header-dash-link">Dashboard</a>
-      <a href="map.html" class="header-map-link">Map</a>
-      <span class="header-current">How it's calculated</span>
+  <div class="page-layout">
+    <div class="ad-slot ad-slot-left">
+      <!-- Replace PLACEHOLDER_LEFT with your AdSense ad unit ID from Get code -->
+      <ins class="adsbygoogle"
+           style="display:block"
+           data-ad-client="ca-pub-6705054810719647"
+           data-ad-slot="PLACEHOLDER_LEFT"
+           data-ad-format="auto"></ins>
     </div>
-  </header>
-  <div class="doc">
+    <div class="main-content">
+      <header>
+        <h1>Siren Probability</h1>
+        <div class="header-links">
+          <a href="index.html" class="header-dash-link">Dashboard</a>
+          <a href="map.html" class="header-map-link">Map</a>
+          <span class="header-current">How it's calculated</span>
+        </div>
+      </header>
+      <div class="ad-slot ad-slot-mobile">
+        <!-- Replace PLACEHOLDER_MOBILE with your AdSense ad unit ID from Get code -->
+        <ins class="adsbygoogle"
+             style="display:block"
+             data-ad-client="ca-pub-6705054810719647"
+             data-ad-slot="PLACEHOLDER_MOBILE"
+             data-ad-format="auto"></ins>
+      </div>
+      <div class="doc">
     <p class="intro">
       This estimate is not an official forecast. It uses Pikud HaOref history and combines four factors per region: (1) time since the last siren in the region, (2) how that compares to the region’s average gap between sirens, (3) which day of the week it is (historically busier or quieter), and (4) which hour of the day it is (least likely hours give less, most likely give more). Data is at city level; we treat events in the same region within a <strong>10-minute window</strong> as one siren incident so a single alarm hitting multiple cities (e.g. Gush Dan) counts once. Gaps, day-of-week, and time-of-day use the last 7 days; “last siren” uses the full history window.
     </p>
@@ -133,6 +181,21 @@
     <p class="data-note">
       <strong>Links:</strong> <span class="footer-links"><a href="index.html">Dashboard</a> · <a href="map.html">Map</a></span>
     </p>
+      </div>
+    </div>
+    <div class="ad-slot ad-slot-right">
+      <!-- Replace PLACEHOLDER_RIGHT with your AdSense ad unit ID from Get code -->
+      <ins class="adsbygoogle"
+           style="display:block"
+           data-ad-client="ca-pub-6705054810719647"
+           data-ad-slot="PLACEHOLDER_RIGHT"
+           data-ad-format="auto"></ins>
+    </div>
   </div>
+  <script>
+    (adsbygoogle = window.adsbygoogle || []).push({});
+    (adsbygoogle = window.adsbygoogle || []).push({});
+    (adsbygoogle = window.adsbygoogle || []).push({});
+  </script>
 </body>
 </html>

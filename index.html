@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6705054810719647" crossorigin="anonymous"></script>
   <style>
     :root {
       --bg-deep: #0a0c12;
@@ -927,18 +928,80 @@
         width: 72vw;
       }
     }
+
+    /* Ad layout: side columns on desktop, in-flow mobile slot on narrow */
+    .page-layout {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 1rem;
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+    .main-content {
+      flex: 0 1 auto;
+      min-width: 0;
+    }
+    .ad-slot-left,
+    .ad-slot-right {
+      flex: 0 0 auto;
+      width: 160px;
+      min-height: 600px;
+    }
+    .ad-slot-left .adsbygoogle,
+    .ad-slot-right .adsbygoogle {
+      display: block;
+      min-height: 600px;
+    }
+    .ad-slot-mobile {
+      display: none;
+      margin: 0.75rem 0;
+      min-height: 100px;
+    }
+    .ad-slot-mobile .adsbygoogle {
+      display: block;
+    }
+    @media (max-width: 1023px) {
+      .ad-slot-left,
+      .ad-slot-right {
+        display: none;
+      }
+      .ad-slot-mobile {
+        display: block;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="ambient-bg" id="ambientBg"></div>
-  <div class="app">
-    <header>
-      <h1>Siren Probability Dashboard</h1>
-      <div class="header-links">
-        <a href="map.html" class="header-map-link" aria-label="View map by region">Map</a>
-        <a href="how-its-calculated.html" class="header-map-link">How it's calculated</a>
-      </div>
-    </header>
+  <div class="page-layout">
+    <div class="ad-slot ad-slot-left">
+      <!-- Replace PLACEHOLDER_LEFT with your AdSense ad unit ID from Get code -->
+      <ins class="adsbygoogle"
+           style="display:block"
+           data-ad-client="ca-pub-6705054810719647"
+           data-ad-slot="PLACEHOLDER_LEFT"
+           data-ad-format="auto"></ins>
+    </div>
+    <div class="main-content">
+      <div class="app">
+        <header>
+          <h1>Siren Probability Dashboard</h1>
+          <div class="header-links">
+            <a href="map.html" class="header-map-link" aria-label="View map by region">Map</a>
+            <a href="how-its-calculated.html" class="header-map-link">How it's calculated</a>
+          </div>
+        </header>
+
+        <div class="ad-slot ad-slot-mobile">
+          <!-- Replace PLACEHOLDER_MOBILE with your AdSense ad unit ID from Get code -->
+          <ins class="adsbygoogle"
+               style="display:block"
+               data-ad-client="ca-pub-6705054810719647"
+               data-ad-slot="PLACEHOLDER_MOBILE"
+               data-ad-format="auto"></ins>
+        </div>
 
     <div class="region-top-bar" id="regionTopBar">
       <span class="region-top-label">Region</span>
@@ -1031,8 +1094,23 @@
     <footer>
       Data from Pikud HaOref. All estimates are based on historical data.
     </footer>
+      </div>
+    </div>
+    <div class="ad-slot ad-slot-right">
+      <!-- Replace PLACEHOLDER_RIGHT with your AdSense ad unit ID from Get code -->
+      <ins class="adsbygoogle"
+           style="display:block"
+           data-ad-client="ca-pub-6705054810719647"
+           data-ad-slot="PLACEHOLDER_RIGHT"
+           data-ad-format="auto"></ins>
+    </div>
   </div>
 
+  <script>
+    (adsbygoogle = window.adsbygoogle || []).push({});
+    (adsbygoogle = window.adsbygoogle || []).push({});
+    (adsbygoogle = window.adsbygoogle || []).push({});
+  </script>
   <script>
     // ========== UI DATA (from local server) ==========
     // Local server (local-pusher) fetches Oref, computes probability, and overwrites data/ui-data.json.
