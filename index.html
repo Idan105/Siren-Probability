@@ -637,15 +637,26 @@
       border: 1px solid var(--glass-border);
       border-radius: 14px;
       padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      min-height: 280px;
+      height: 280px;
     }
     .tier-list-box h3 {
       font-size: 0.95rem;
       font-weight: 600;
-      margin-bottom: 0.75rem;
+      margin-bottom: 0.25rem;
       color: var(--text-primary);
+    }
+    .tier-list-box .controls-desc {
+      margin-bottom: 0.5rem;
+      flex-shrink: 0;
     }
     .tier-list {
       list-style: none;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
     }
     .tier-list li {
       display: flex;
