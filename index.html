@@ -91,6 +91,7 @@
       color: var(--text-muted);
       letter-spacing: 0.05em;
     }
+    .header-links { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
     .header-map-link {
       display: inline-flex;
       align-items: center;
@@ -841,7 +842,10 @@
   <div class="app">
     <header>
       <h1>Siren Probability Dashboard</h1>
-      <a href="map.html" class="header-map-link" aria-label="View map by region">Map</a>
+      <div class="header-links">
+        <a href="map.html" class="header-map-link" aria-label="View map by region">Map</a>
+        <a href="how-its-calculated.html" class="header-map-link">How it's calculated</a>
+      </div>
     </header>
 
     <div class="region-top-bar" id="regionTopBar">

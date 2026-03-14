@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How it's calculated — Siren Probability</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-deep: #0a0c12;
+      --glass: rgba(255, 255, 255, 0.04);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --text-primary: #e8ecf4;
+      --text-muted: #8b95a8;
+      --accent-cyan: #00d4aa;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 1rem;
+      line-height: 1.6;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    header h1 { font-size: 1.25rem; font-weight: 600; color: var(--text-muted); }
+    .header-links { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .header-dash-link, .header-map-link, .header-current {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.4rem 0.75rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      text-decoration: none;
+    }
+    .header-dash-link, .header-map-link {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      color: var(--text-primary);
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .header-dash-link:hover, .header-map-link:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.12);
+    }
+    .header-current {
+      color: var(--text-muted);
+      cursor: default;
+    }
+    .doc {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .doc p { margin-bottom: 1rem; color: var(--text-primary); }
+    .doc .intro { color: var(--text-muted); margin-bottom: 1.5rem; }
+    .doc h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      margin-top: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .doc h3 {
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-top: 1rem;
+      margin-bottom: 0.35rem;
+    }
+    .doc ul { margin: 0.5rem 0 1rem 1.25rem; }
+    .doc li { margin-bottom: 0.25rem; }
+    .doc code, .doc .formula {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 4px;
+      padding: 0.15rem 0.4rem;
+      font-size: 0.9em;
+    }
+    .doc .formula { display: inline-block; margin: 0.35rem 0; }
+    .doc .data-note { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--glass-border); color: var(--text-muted); font-size: 0.95rem; }
+    .doc .footer-links { margin-top: 1rem; }
+    .doc .footer-links a { color: var(--accent-cyan); text-decoration: none; }
+    .doc .footer-links a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Siren Probability</h1>
+    <div class="header-links">
+      <a href="index.html" class="header-dash-link">Dashboard</a>
+      <a href="map.html" class="header-map-link">Map</a>
+      <span class="header-current">How it's calculated</span>
+    </div>
+  </header>
+  <div class="doc">
+    <p class="intro">
+      This estimate is not an official forecast. It uses Pikud HaOref history and combines three factors per region: (1) time since the last siren in the region, (2) how that compares to the region’s average gap between sirens, and (3) whether the current hour is historically a peak time for alarms. Gaps and time-of-day patterns use data from the last 7 days; “last siren” uses the full history window.
+    </p>
+
+    <h2>Time since last alarm (region)</h2>
+    <p>Minutes since the most recent siren in that region.</p>
+    <p>Contribution ramps linearly from 0 (before 30 minutes) to a maximum by 8 hours; that raw value is scaled to a share (e.g. max 20 points) and <strong>Gaussian-smoothed</strong> so the number doesn’t jump abruptly when a new siren occurs. The ramp start and full contribution times are configurable (<code>timeSinceRampStartMin</code>, <code>timeSinceFullMin</code>).</p>
+
+    <h2>Average time between alarms (region)</h2>
+    <p>Average gap (minutes) between consecutive sirens in the region over the last 7 days (same place key: city + rounded lat/lon).</p>
+    <p>We use the ratio <span class="formula">ratio = minutesSinceLast / averageGap</span>. Contribution grows with this ratio and is capped when you’re at 2× the average (full contribution): <span class="formula">contribution = 65 × min(ratio / 2, 1)</span> (65 is the share cap and is configurable as <code>gapShareMax</code>).</p>
+    <p>When you’re <strong>under</strong> the average (less time has passed since the last siren than usual), the contribution is lower; as you approach the average, it rises. When you’re <strong>over</strong> the average (more time has passed than usual), the contribution is higher—the model treats that as increased risk.</p>
+
+    <h2>Time of day (region pattern)</h2>
+    <p>From the last 7 days, we take the top 5 hours (0–23) with the most sirens in that region. If the current hour is one of those, it gets a <strong>multiplier</strong> on the base risk (rank 1 = strongest, rank 5 = weakest); off-peak the factor is 1.0.</p>
+    <p>Weight comes from <code>peakHourWeights</code> by rank; the multiplier is <span class="formula">1 + (weight × timeOfDayFactorRange)</span>. The dashboard breakdown shows the time-of-day effect as an additive equivalent: <span class="formula">(factor − 1) × baseRisk</span>.</p>
+
+    <h2>How the total is calculated</h2>
+    <p>Base risk is the sum of the first two shares (time-since and gap): <span class="formula">baseRisk = timeSinceShare + gapShare</span>. Only the time-since share is smoothed; the gap share is not.</p>
+    <p>Total probability is the base risk multiplied by the time-of-day factor, then clamped: <span class="formula">probability = clamp(baseRisk × timeOfDayFactor)</span> to the range [0.5, 99.4] (<code>minP</code>, <code>maxP</code>).</p>
+    <p>The breakdown percentages you see in the dashboard are the three shares (time-since, gap, and the additive equivalent of time-of-day); their sum equals the final number before clamping.</p>
+
+    <h2>Data and region</h2>
+    <p>Events are assigned to regions by distance to the region center. Stats (gaps, peak hours) use only events in that region; when a region has no events we fall back to nationwide data. Data source: last 7 days for gaps and time-of-day; full history window for “last siren” and the event list.</p>
+    <p class="data-note">
+      <strong>Links:</strong> <span class="footer-links"><a href="index.html">Dashboard</a> · <a href="map.html">Map</a></span>
+    </p>
+  </div>
+</body>
+</html>
