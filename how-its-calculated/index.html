@@ -160,22 +160,22 @@
 
     <h2>Time since last alarm (region)</h2>
     <p>Minutes since the most recent siren in that region.</p>
-    <p>Contribution ramps linearly from 0 (before 30 minutes) to a maximum by 8 hours; that raw value is scaled to a share (max 15 points) and <strong>Gaussian-smoothed</strong> so the number doesn't jump abruptly when a new siren occurs. The ramp start and full contribution times are configurable (<code>timeSinceRampStartMin</code>, <code>timeSinceFullMin</code>).</p>
+    <p>Contribution ramps linearly from 0 (before 30 minutes) to a maximum by 8 hours; that raw value is scaled to a share (max 20 points) and <strong>Gaussian-smoothed</strong> so the number doesn't jump abruptly when a new siren occurs. The ramp start and full contribution times are configurable (<code>timeSinceRampStartMin</code>, <code>timeSinceFullMin</code>).</p>
 
     <h2>Average time between alarms (region)</h2>
     <p>Average gap (minutes) between consecutive <strong>siren incidents</strong> in the region over the last 7 days. Incidents are collapsed with a 20-minute debounce per region (<code>debounceWindowMs</code>), so one alarm that hits several cities counts as one.</p>
-    <p>We use the ratio <span class="formula">ratio = minutesSinceLast / averageGap</span>. Contribution grows with this ratio and is capped when you're at 2× the average (full contribution): <span class="formula">share = 45 × min(ratio / 2, 1)</span> (45 is the share cap, <code>gapShareMax</code>).</p>
+    <p>We use the ratio <span class="formula">ratio = minutesSinceLast / averageGap</span>. Contribution grows with this ratio and is capped when you're at 2× the average (full contribution): <span class="formula">share = 50 × min(ratio / 2, 1)</span> (50 is the share cap, <code>gapShareMax</code>).</p>
     <p>When you're <strong>under</strong> the average (less time has passed since the last siren than usual), the contribution is lower; as you approach the average, it rises. When you're <strong>over</strong> the average (more time has passed than usual), the contribution is higher—the model treats that as increased risk.</p>
 
     <h2>Day of week (region pattern)</h2>
     <p>From the last 7 days, we count sirens per weekday (Sunday–Saturday) in the region. The current weekday gets a share from 0 to 10: the <strong>least likely</strong> weekday gets 0, the <strong>most likely</strong> gets the full 10. If all weekdays have the same count, the factor is 0.5. Share cap is <code>dayOfWeekShareMax</code> (10).</p>
 
     <h2>Time of day (region pattern)</h2>
-    <p>All 24 hours are used. From the last 7 days we count sirens per hour (0–23) in the region. Every hour gets a share between a minimum and maximum: the <strong>least likely</strong> (quietest) hour gets about 2%, the <strong>most likely</strong> (busiest) gets the full 30%, and hours in between scale so that more likely hours get a higher share. Config: <code>dayShareMin</code> (2), <code>dayShareMax</code> (30).</p>
+    <p>All 24 hours are used. From the last 7 days we count sirens per hour (0–23) in the region. Every hour gets a share between a minimum and maximum: the <strong>least likely</strong> (quietest) hour gets about 2%, the <strong>most likely</strong> (busiest) gets the full 20%, and hours in between scale so that more likely hours get a higher share. Config: <code>dayShareMin</code> (2), <code>dayShareMax</code> (20).</p>
 
     <h2>How the total is calculated</h2>
     <p>Total probability is the <strong>sum</strong> of the four shares, then clamped: <span class="formula">probability = clamp(timeSinceShare + gapShare + dayOfWeekShare + dayShare)</span> to the range [0.5, 99.4] (<code>minP</code>, <code>maxP</code>). Only the time-since share is Gaussian-smoothed; the others are not.</p>
-    <p>The breakdown in the dashboard shows these four shares; their sum is the value before clamping. Max possible from each: time since 15, average gap 45, day of week 10, time of day 30 (total 100).</p>
+    <p>The breakdown in the dashboard shows these four shares; their sum is the value before clamping. Max possible from each: time since 20, average gap 50, day of week 10, time of day 20 (total 100).</p>
 
     <h2>Data and region</h2>
     <p>Events are assigned to regions by distance to the region center. Within each region, events within 20 minutes are merged into one incident so regions with more cities don't get inflated counts. Stats (gaps, weekday counts, hourly counts) use only incidents in that region; when a region has no events we fall back to nationwide data. Data source: last 7 days for gaps, day-of-week, and time-of-day; full history window for "last siren" and the event list.</p>
