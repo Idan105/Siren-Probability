@@ -657,6 +657,23 @@
       flex: 1;
       min-height: 0;
       overflow-y: auto;
+      padding-right: 0.5rem;
+      scrollbar-gutter: stable;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+    }
+    .tier-list::-webkit-scrollbar {
+      width: 6px;
+    }
+    .tier-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .tier-list::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.25);
+      border-radius: 3px;
+    }
+    .tier-list::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.35);
     }
     .tier-list li {
       display: flex;
