@@ -142,12 +142,25 @@
       function projectLonLat(lon, lat) { return [lon * COS_LAT, lat]; }
       function unprojectXY(x, y) { return [x / COS_LAT, y]; }
 
-      // Voronoi cells in projected space, optionally clipped to Israel (districts). Uses polygon-clipping lib.
-      function voronoiGeoJSON(districtsFC) {
+      // Collect polygon(s) from a GeoJSON feature (Polygon = 1, MultiPolygon = many) for clipping.
+      function getPolygonsFromFeature(feature) {
+        var geom = feature && feature.geometry;
+        if (!geom || !geom.coordinates) return [];
+        if (geom.type === 'Polygon') return [geom.coordinates];
+        if (geom.type === 'MultiPolygon') return geom.coordinates;
+        return [];
+      }
+
+      // Voronoi cells in projected space, clipped to Israel (districts) + West Bank. Uses polygon-clipping lib.
+      function voronoiGeoJSON(districtsFC, westBankFC) {
         var DelaunayLib = (typeof d3 !== 'undefined' && d3.Delaunay) ? d3.Delaunay : (typeof Delaunay !== 'undefined' ? Delaunay : null);
         if (!DelaunayLib) throw new Error('Delaunay not loaded');
         var clip = (typeof polygonClipping !== 'undefined' && polygonClipping && polygonClipping.intersection) || null;
-        var districts = (districtsFC && districtsFC.features) || [];
+        var clipSources = [];
+        var dFeatures = (districtsFC && districtsFC.features) || [];
+        for (var di = 0; di < dFeatures.length; di++) clipSources.push(dFeatures[di]);
+        var wbFeatures = (westBankFC && westBankFC.features) || [];
+        for (var wi = 0; wi < wbFeatures.length; wi++) clipSources.push(wbFeatures[wi]);
         var b = [34.2, 29.4, 35.9, 33.4];
         var points = REGIONS.map(function (r) { return projectLonLat(r.lon, r.lat); });
         var boundsProj = [
@@ -164,27 +177,28 @@
           if (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1]) ring.push([ring[0][0], ring[0][1]]);
           var cellPoly = [ring];
           var added = false;
-          if (clip && districts.length > 0) {
-            for (var d = 0; d < districts.length; d++) {
-              var geom = districts[d].geometry;
-              if (!geom || !geom.coordinates) continue;
-              var districtPoly = geom.type === 'Polygon' ? geom.coordinates : (geom.type === 'MultiPolygon' ? geom.coordinates[0] : null);
-              if (!districtPoly) continue;
-              try {
-                var result = clip(cellPoly, districtPoly);
-                if (!result || result.length === 0) continue;
-                for (var r = 0; r < result.length; r++) {
-                  var coords = result[r];
-                  if (coords && coords[0] && coords[0].length >= 3) {
-                    out.push({
-                      type: 'Feature',
-                      properties: { region_id: REGIONS[i].id, name: REGIONS[i].name },
-                      geometry: { type: 'Polygon', coordinates: coords }
-                    });
-                    added = true;
+          if (clip && clipSources.length > 0) {
+            for (var s = 0; s < clipSources.length; s++) {
+              var polygons = getPolygonsFromFeature(clipSources[s]);
+              for (var p = 0; p < polygons.length; p++) {
+                var districtPoly = polygons[p];
+                if (!districtPoly) continue;
+                try {
+                  var result = clip(cellPoly, districtPoly);
+                  if (!result || result.length === 0) continue;
+                  for (var r = 0; r < result.length; r++) {
+                    var coords = result[r];
+                    if (coords && coords[0] && coords[0].length >= 3) {
+                      out.push({
+                        type: 'Feature',
+                        properties: { region_id: REGIONS[i].id, name: REGIONS[i].name },
+                        geometry: { type: 'Polygon', coordinates: coords }
+                      });
+                      added = true;
+                    }
                   }
-                }
-              } catch (e) { /* skip */ }
+                } catch (e) { /* skip */ }
+              }
             }
           }
           if (!added) {
@@ -264,16 +278,26 @@
           .catch(function () { return null; });
       }
 
+      function fetchWestBank() {
+        return fetch('data/west-bank.geojson').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+          .then(function (data) {
+            if (data && data.features && data.features.length > 0) return data;
+            return fetch('https://cdn.jsdelivr.net/gh/sepans/palestine_geodata@master/palestine.geo.json').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+          });
+      }
+
       function run() {
         const statusEl = document.getElementById('mapStatus');
         Promise.all([
           fetchUiData(),
-          fetch('data/israel-districts.geojson').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+          fetch('data/israel-districts.geojson').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+          fetchWestBank()
         ]).then(function (results) {
           const uiData = results[0];
           const districtsFC = results[1];
+          const westBankFC = results[2];
           const regions = uiData && uiData.regions && typeof uiData.regions === 'object' ? uiData.regions : null;
-          const geojson = voronoiGeoJSON(districtsFC);
+          const geojson = voronoiGeoJSON(districtsFC, westBankFC);
 
           const map = L.map('map').setView([31.5, 35.0], 7);
           L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
