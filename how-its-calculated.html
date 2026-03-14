@@ -122,7 +122,7 @@
     <p>From the last 7 days, we count sirens per weekday (Sunday–Saturday) in the region. The current weekday gets a share from 0 to 10: the <strong>least likely</strong> weekday gets 0, the <strong>most likely</strong> gets the full 10. If all weekdays have the same count, the factor is 0.5. Share cap is <code>dayOfWeekShareMax</code> (10).</p>
 
     <h2>Time of day (region pattern)</h2>
-    <p>All 24 hours are used. From the last 7 days we count sirens per hour (0–23) in the region. The current hour gets a share from 0 to 30: the <strong>least likely</strong> hour gets 0, the <strong>most likely</strong> hour gets the full 30. If all hours have the same count, the factor is 0.5. Share cap is <code>dayShareMax</code> (30).</p>
+    <p>All 24 hours are used. From the last 7 days we count sirens per hour (0–23) in the region. Every hour gets a share between a minimum and maximum: the <strong>least likely</strong> (quietest) hour gets about 2%, the <strong>most likely</strong> (busiest) gets the full 30%, and hours in between scale so that more likely hours get a higher share. Config: <code>dayShareMin</code> (2), <code>dayShareMax</code> (30).</p>
 
     <h2>How the total is calculated</h2>
     <p>Total probability is the <strong>sum</strong> of the four shares, then clamped: <span class="formula">probability = clamp(timeSinceShare + gapShare + dayOfWeekShare + dayShare)</span> to the range [0.5, 99.4] (<code>minP</code>, <code>maxP</code>). Only the time-since share is Gaussian-smoothed; the others are not.</p>
