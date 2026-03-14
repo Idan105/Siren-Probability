@@ -114,7 +114,7 @@
     <p>Contribution ramps linearly from 0 (before 30 minutes) to a maximum by 8 hours; that raw value is scaled to a share (max 15 points) and <strong>Gaussian-smoothed</strong> so the number doesn’t jump abruptly when a new siren occurs. The ramp start and full contribution times are configurable (<code>timeSinceRampStartMin</code>, <code>timeSinceFullMin</code>).</p>
 
     <h2>Average time between alarms (region)</h2>
-    <p>Average gap (minutes) between consecutive <strong>siren incidents</strong> in the region over the last 7 days. Incidents are collapsed with a 10-minute debounce per region (<code>debounceWindowMs</code>), so one alarm that hits several cities counts as one.</p>
+    <p>Average gap (minutes) between consecutive <strong>siren incidents</strong> in the region over the last 7 days. Incidents are collapsed with a 20-minute debounce per region (<code>debounceWindowMs</code>), so one alarm that hits several cities counts as one.</p>
     <p>We use the ratio <span class="formula">ratio = minutesSinceLast / averageGap</span>. Contribution grows with this ratio and is capped when you’re at 2× the average (full contribution): <span class="formula">share = 45 × min(ratio / 2, 1)</span> (45 is the share cap, <code>gapShareMax</code>).</p>
     <p>When you’re <strong>under</strong> the average (less time has passed since the last siren than usual), the contribution is lower; as you approach the average, it rises. When you’re <strong>over</strong> the average (more time has passed than usual), the contribution is higher—the model treats that as increased risk.</p>
 
@@ -129,7 +129,7 @@
     <p>The breakdown in the dashboard shows these four shares; their sum is the value before clamping. Max possible from each: time since 15, average gap 45, day of week 10, time of day 30 (total 100).</p>
 
     <h2>Data and region</h2>
-    <p>Events are assigned to regions by distance to the region center. Within each region, events within 10 minutes are merged into one incident so regions with more cities don’t get inflated counts. Stats (gaps, weekday counts, hourly counts) use only incidents in that region; when a region has no events we fall back to nationwide data. Data source: last 7 days for gaps, day-of-week, and time-of-day; full history window for “last siren” and the event list.</p>
+    <p>Events are assigned to regions by distance to the region center. Within each region, events within 20 minutes are merged into one incident so regions with more cities don’t get inflated counts. Stats (gaps, weekday counts, hourly counts) use only incidents in that region; when a region has no events we fall back to nationwide data. Data source: last 7 days for gaps, day-of-week, and time-of-day; full history window for “last siren” and the event list.</p>
     <p class="data-note">
       <strong>Links:</strong> <span class="footer-links"><a href="index.html">Dashboard</a> · <a href="map.html">Map</a></span>
     </p>
