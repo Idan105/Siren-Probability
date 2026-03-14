@@ -617,6 +617,63 @@
     }
     .breakdown-list li.breakdown-sum .breakdown-percent { color: var(--text-primary); }
 
+    /* Tier lists: day of week & time of day (most → least probable) */
+    .tier-lists-section {
+      display: none;
+      margin-bottom: 1.5rem;
+      gap: 1rem;
+      grid-template-columns: 1fr 1fr;
+      align-items: start;
+    }
+    .tier-lists-section.visible {
+      display: grid;
+    }
+    @media (max-width: 640px) {
+      .tier-lists-section { grid-template-columns: 1fr; }
+    }
+    .tier-list-box {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 1.25rem;
+    }
+    .tier-list-box h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: var(--text-primary);
+    }
+    .tier-list {
+      list-style: none;
+    }
+    .tier-list li {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid var(--glass-border);
+      font-size: 0.88rem;
+    }
+    .tier-list li:last-child { border-bottom: none; }
+    .tier-list .tier-rank {
+      flex-shrink: 0;
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 6px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .tier-list .tier-rank.top { background: rgba(0, 212, 170, 0.15); border-color: rgba(0, 212, 170, 0.35); color: var(--accent-cyan); }
+    .tier-list .tier-label { color: var(--text-primary); min-width: 0; }
+    .tier-list .tier-count { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--text-muted); margin-left: auto; }
+
     /* Distance visual */
     .distance-visual {
       height: 8px;
@@ -914,6 +971,19 @@
       <h3>Probability breakdown</h3>
       <p class="controls-desc" style="margin-bottom: 0.75rem;">How the estimate is built from sub-factors (percent contribution to total).</p>
       <ul class="breakdown-list" id="breakdownList"></ul>
+    </section>
+
+    <section class="tier-lists-section" id="tierListsSection">
+      <div class="tier-list-box">
+        <h3>Day of week</h3>
+        <p class="controls-desc" style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;">Most → least probable (last 7 days)</p>
+        <ul class="tier-list" id="weekdayTierList"></ul>
+      </div>
+      <div class="tier-list-box">
+        <h3>Time of day</h3>
+        <p class="controls-desc" style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;">Most → least probable (last 7 days)</p>
+        <ul class="tier-list" id="hourTierList"></ul>
+      </div>
     </section>
 
     <section class="explanation">
@@ -1437,6 +1507,9 @@
         if (historySection) historySection.style.display = '';
         renderProbabilityHistory(regionData);
         renderBreakdownList(regionData.breakdown, probability);
+        renderTierLists(regionData);
+        const tierSection = document.getElementById('tierListsSection');
+        if (tierSection) tierSection.classList.add('visible');
       } else {
         const out = getSmoothedProbability();
         probability = out.probability;
@@ -1449,6 +1522,8 @@
         if (historySection) historySection.style.display = 'none';
         const breakdownSection = document.getElementById('breakdownSection');
         if (breakdownSection) breakdownSection.style.display = 'none';
+        const tierSection = document.getElementById('tierListsSection');
+        if (tierSection) tierSection.classList.remove('visible');
       }
       const displayP = Math.round(probability * 10) / 10;
 
@@ -1569,6 +1644,25 @@
         return `<li><span class="breakdown-label">${item.label}</span><span class="breakdown-value">${valueStr}</span><span class="breakdown-percent">${percentStr}</span>${desc}</li>`;
       }).join('');
       el.innerHTML = rows + `<li class="breakdown-sum"><span class="breakdown-label">Total (sum of factors)</span><span class="breakdown-value"></span><span class="breakdown-percent">${sumRaw.toFixed(1)}%</span></li>`;
+    }
+
+    function renderTierLists(regionData) {
+      const weekdayEl = document.getElementById('weekdayTierList');
+      const hourEl = document.getElementById('hourTierList');
+      if (!weekdayEl || !hourEl) return;
+      const weekdays = Array.isArray(regionData.weekdayRanking) ? regionData.weekdayRanking : [];
+      const hours = Array.isArray(regionData.hourRanking) ? regionData.hourRanking : [];
+      weekdayEl.innerHTML = weekdays.map((item, i) => {
+        const rank = i + 1;
+        const rankClass = rank === 1 ? 'tier-rank top' : 'tier-rank';
+        return `<li><span class="${rankClass}">${rank}</span><span class="tier-label">${item.label || '—'}</span><span class="tier-count">${item.count}</span></li>`;
+      }).join('');
+      hourEl.innerHTML = hours.map((item, i) => {
+        const rank = i + 1;
+        const rankClass = rank === 1 ? 'tier-rank top' : 'tier-rank';
+        const hourStr = String(item.hour).padStart(2, '0') + ':00';
+        return `<li><span class="${rankClass}">${rank}</span><span class="tier-label">${hourStr}</span><span class="tier-count">${item.count}</span></li>`;
+      }).join('');
     }
 
     function placeRegionSelect() {
