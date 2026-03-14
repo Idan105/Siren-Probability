@@ -144,8 +144,8 @@
       <header>
         <h1>Siren Probability — Map</h1>
         <div class="header-links">
-          <a href="index.html" class="header-dash-link">Dashboard</a>
-          <a href="how-its-calculated.html" class="header-map-link">How it's calculated</a>
+          <a href="/" class="header-dash-link">Dashboard</a>
+          <a href="/how-its-calculated" class="header-map-link">How it's calculated</a>
         </div>
       </header>
       <div class="ad-slot ad-slot-mobile">
@@ -187,7 +187,7 @@
   <script src="https://unpkg.com/polygon-clipping@0.15.6/dist/polygon-clipping.umd.js" crossorigin=""></script>
   <script>
     (function () {
-      const OREF_JSON_DATA_PATH = 'data';
+      const OREF_JSON_DATA_PATH = '../data';
       let regionsLayer = null;
       let circlesLayer = null;
 
@@ -345,7 +345,7 @@
       }
 
       function fetchWestBank() {
-        return fetch('data/west-bank.geojson').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+        return fetch('../data/west-bank.geojson').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
           .then(function (data) {
             if (data && data.features && data.features.length > 0) return data;
             return fetch('https://cdn.jsdelivr.net/gh/sepans/palestine_geodata@master/palestine.geo.json').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
@@ -356,7 +356,7 @@
         const statusEl = document.getElementById('mapStatus');
         Promise.all([
           fetchUiData(),
-          fetch('data/israel-districts.geojson').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+          fetch('../data/israel-districts.geojson').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
           fetchWestBank()
         ]).then(function (results) {
           const uiData = results[0];
