@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Region map — Siren Probability</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-deep: #0a0c12;
+      --glass: rgba(255, 255, 255, 0.04);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --text-primary: #e8ecf4;
+      --text-muted: #8b95a8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 1rem;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    header h1 { font-size: 1.25rem; font-weight: 600; color: var(--text-muted); }
+    .header-dash-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.4rem 0.75rem;
+      border-radius: 8px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .header-dash-link:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.12);
+    }
+    .map-wrap {
+      max-width: 420px;
+      margin: 0 auto;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+    .map-wrap svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .map-wrap path {
+      cursor: default;
+      transition: fill 0.3s ease, filter 0.2s ease;
+    }
+    .map-wrap path:hover {
+      filter: brightness(1.15);
+    }
+    .map-prob-circle {
+      cursor: default;
+    }
+    .map-prob-circle text {
+      font-family: 'Outfit', 'JetBrains Mono', sans-serif;
+      font-size: 22px;
+      font-weight: 600;
+      fill: var(--text-primary);
+      text-anchor: middle;
+      dominant-baseline: central;
+      pointer-events: none;
+    }
+    .map-legend {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .map-legend span { display: flex; align-items: center; gap: 0.35rem; }
+    .map-legend i {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+    .map-status {
+      text-align: center;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Siren Probability — Map</h1>
+    <a href="index.html" class="header-dash-link" aria-label="Back to dashboard">Dashboard</a>
+  </header>
+  <div class="map-wrap" id="mapWrap">
+    <div class="map-status" id="mapStatus">Loading map…</div>
+  </div>
+  <div class="map-legend" id="mapLegend" aria-hidden="true">
+    <span><i style="background:#00d4aa;"></i> Low</span>
+    <span><i style="background:#f59e0b;"></i> Medium</span>
+    <span><i style="background:#ef4444;"></i> High</span>
+  </div>
+
+  <script>
+    (function () {
+      const OREF_JSON_DATA_PATH = 'data';
+      // SVG path id → app region id (for ui-data.json regions)
+      const SVG_TO_REGION = {
+        'ILD': 'south',      // HaDarom
+        'ILZ': 'galil',      // HaZafon
+        'ILHA': 'north',     // Haifa
+        'ILM': 'center',     // HaMerkaz
+        'ILJM': 'jerusalem', // Jerusalem
+        'ILTA': 'center'     // Tel Aviv (same as center)
+      };
+      // Label positions in SVG viewBox (0 0 1000 1000) for probability circles
+      const LABEL_POSITIONS = {
+        'ILD': [457.1, 635.7],
+        'ILZ': [580.7, 174.1],
+        'ILHA': [491.9, 204.2],
+        'ILM': [450.5, 400.3],
+        'ILJM': [493.5, 434.3],
+        'ILTA': [447.7, 362.2]
+      };
+      const DEFAULT_FILL = 'rgba(111, 156, 118, 0.5)'; // subtle green when no data
+      const PROB_CIRCLE_R = 32;
+
+      function probabilityToColor(p) {
+        if (p == null || isNaN(p)) return DEFAULT_FILL;
+        p = Math.max(0, Math.min(100, p));
+        if (p <= 33) {
+          const t = p / 33;
+          return 'rgb(' + Math.round(0 + t * 0) + ',' + Math.round(212 + t * (158 - 212)) + ',' + Math.round(170 + t * (11 - 170)) + ')';
+        }
+        if (p <= 66) {
+          const t = (p - 33) / 33;
+          return 'rgb(' + Math.round(245 + t * (239 - 245)) + ',' + Math.round(158 + t * (68 - 158)) + ',' + Math.round(11 + t * (68 - 11)) + ')';
+        }
+        const t = (p - 66) / 34;
+        return 'rgb(239,' + Math.round(68 + t * (68 - 68)) + ',' + Math.round(68 + t * (68 - 68)) + ')';
+      }
+
+      function ensureProbCirclesGroup(svgEl) {
+        let g = svgEl.querySelector('#prob-circles');
+        if (!g) {
+          g = svgEl.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'g');
+          g.id = 'prob-circles';
+          svgEl.appendChild(g);
+        }
+        return g;
+      }
+
+      function updateProbCircles(svgEl, regions) {
+        const group = ensureProbCirclesGroup(svgEl);
+        const pathIds = Object.keys(SVG_TO_REGION);
+        pathIds.forEach(function (pathId) {
+          const regionId = SVG_TO_REGION[pathId];
+          const data = regions && regions[regionId];
+          const p = data && typeof data.probability === 'number' ? data.probability : null;
+          const fillColor = probabilityToColor(p);
+          const pos = LABEL_POSITIONS[pathId];
+          if (!pos) return;
+          let g = group.querySelector('[data-path-id="' + pathId + '"]');
+          if (!g) {
+            g = svgEl.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('data-path-id', pathId);
+            g.setAttribute('class', 'map-prob-circle');
+            const circle = svgEl.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('r', PROB_CIRCLE_R);
+            circle.setAttribute('cx', pos[0]);
+            circle.setAttribute('cy', pos[1]);
+            const text = svgEl.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', pos[0]);
+            text.setAttribute('y', pos[1]);
+            g.appendChild(circle);
+            g.appendChild(text);
+            group.appendChild(g);
+          }
+          const circle = g.querySelector('circle');
+          const textEl = g.querySelector('text');
+          if (circle) {
+            circle.setAttribute('fill', 'rgba(18, 22, 32, 0.92)');
+            circle.setAttribute('stroke', fillColor);
+            circle.setAttribute('stroke-width', '2');
+          }
+          if (textEl) {
+            textEl.textContent = p != null && !isNaN(p) ? Math.round(p) + '%' : '—';
+          }
+        });
+      }
+
+      function applyUiData(svgEl, regions) {
+        if (!svgEl) return;
+        const doc = svgEl.ownerDocument || document;
+        const pathIds = Object.keys(SVG_TO_REGION);
+        pathIds.forEach(function (pathId) {
+          const path = doc.getElementById(pathId);
+          if (!path) return;
+          const regionId = SVG_TO_REGION[pathId];
+          const data = regions && regions[regionId];
+          const p = data && typeof data.probability === 'number' ? data.probability : null;
+          path.style.fill = probabilityToColor(p);
+        });
+        updateProbCircles(svgEl, regions);
+      }
+
+      function loadSvg() {
+        return fetch('img/il.svg', { cache: 'no-store' })
+          .then(function (r) { return r.text(); })
+          .then(function (text) {
+            const wrap = document.getElementById('mapWrap');
+            const status = document.getElementById('mapStatus');
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, 'image/svg+xml');
+            const svg = doc.documentElement;
+            if (svg && svg.tagName && svg.tagName.toUpperCase() === 'SVG') {
+              wrap.insertBefore(svg, status);
+              status.style.display = 'none';
+              document.getElementById('mapLegend').setAttribute('aria-hidden', 'false');
+              return wrap.querySelector('svg');
+            }
+            throw new Error('Invalid SVG');
+          });
+      }
+
+      function fetchUiData() {
+        const base = (OREF_JSON_DATA_PATH || 'data').replace(/\/$/, '');
+        return fetch(base + '/ui-data.json', { method: 'GET', cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .catch(function () { return null; });
+      }
+
+      function run() {
+        const wrap = document.getElementById('mapWrap');
+        const statusEl = document.getElementById('mapStatus');
+        loadSvg()
+          .then(function (svgEl) {
+            if (!svgEl) return;
+            fetchUiData().then(function (data) {
+              const regions = data && data.regions && typeof data.regions === 'object' ? data.regions : null;
+              applyUiData(svgEl, regions);
+              if (!regions) {
+                if (statusEl) statusEl.textContent = 'Run the local server to see live probability on the map.';
+                statusEl.style.display = 'block';
+              }
+            });
+            // Poll for updates when server is used
+            setInterval(function () {
+              fetchUiData().then(function (data) {
+                const regions = data && data.regions ? data.regions : null;
+                applyUiData(svgEl, regions);
+              });
+            }, 5000);
+          })
+          .catch(function () {
+            if (statusEl) statusEl.textContent = 'Could not load map.';
+          });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', run);
+      } else {
+        run();
+      }
+    })();
+  </script>
+</body>
+</html>

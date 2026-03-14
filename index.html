@@ -91,6 +91,24 @@
       color: var(--text-muted);
       letter-spacing: 0.05em;
     }
+    .header-map-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.4rem 0.75rem;
+      border-radius: 8px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .header-map-link:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.12);
+    }
     /* Desktop: region in top bar */
     .region-top-bar {
       display: flex;
@@ -823,6 +841,7 @@
   <div class="app">
     <header>
       <h1>Siren Probability Dashboard</h1>
+      <a href="map.html" class="header-map-link" aria-label="View map by region">Map</a>
     </header>
 
     <div class="region-top-bar" id="regionTopBar">
